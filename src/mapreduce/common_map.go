@@ -1,13 +1,16 @@
 package mapreduce
 
 import (
+	"encoding/json"
+	"fmt"
 	"hash/fnv"
+	"os"
 )
 
 func doMap(
 	jobName string, // the name of the MapReduce job
 	mapTask int, // which map task this is
-	inFile string,
+	inFile string, //mine: input file name
 	nReduce int, // the number of reduce task that will be run ("R" in the paper)
 	mapF func(filename string, contents string) []KeyValue,
 ) {
@@ -53,6 +56,56 @@ func doMap(
 	//
 	// Your code here (Part I).
 	//
+	fmt.Print(inFile)
+
+	//------------read file s----------------------
+	//open file
+	file, err := os.Open(inFile)
+	if err != nil {
+		fmt.Print(err)
+	} else {
+		fmt.Print("open file success!")
+	}
+	//get the length of file
+	fi, _ := file.Stat()
+	contents := make([]byte, fi.Size())
+	//load content to contents
+	file.Read(contents)
+	file.Close()
+	//------------read file e----------------------
+
+	//------------create reduce files s------------
+	kv := mapF(inFile, string(contents))
+	filesEnc := make([](*json.Encoder), nReduce)
+	files := make([]*os.File, nReduce)
+
+	//set the name of the reduce-input-file
+	for i := range filesEnc {
+		f, err1 := os.Create(reduceName(jobName, mapTask, i))
+		if err1 == nil {
+			//set the target file info to the encoder
+			filesEnc[i] = json.NewEncoder(f)
+			//store the reduce-file-info to the files
+			files[i] = f
+		} else {
+			fmt.Print(err1)
+		}
+	}
+
+	//write the map result to the reduce-input-file
+	for _, v := range kv {
+		//write the value of the map result to the encoder
+		err2 := filesEnc[ihash(v.Key)%nReduce].Encode(&v)
+		if err2 != nil {
+			fmt.Print(err2)
+		}
+	}
+
+	//close the files that opened to write reduce-input-data
+	for _, f := range files {
+		f.Close()
+	}
+
 }
 
 func ihash(s string) int {
