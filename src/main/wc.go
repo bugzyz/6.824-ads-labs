@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"mapreduce"
 	"os"
+	"strings"
 )
 
 //
@@ -15,6 +16,7 @@ import (
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
 	// Your code here (Part II).
+	contentss := contents.split(" ")
 }
 
 //
