@@ -36,47 +36,54 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	//set a waitGroup to wait for map\reduce phase done
 	var wg sync.WaitGroup
-
-	//for each task in ntasks
+	// a argsSpace that store all the args
+	argsSpace := make([]DoTaskArgs, 0)
+	//put the unfinished task into a channel
+	taskChan := make(chan int, ntasks)
 	for i := 0; i < ntasks; i++ {
-		taskNum := i
+		argsSpace = append(argsSpace, DoTaskArgs{jobName, mapFiles[i], phase, i, n_other})
+		//load the unifished task num
+		taskChan <- i
+	}
+	//for each task in ntasks
+	for {
+		//task num-tn
+		//now we are doing the tn
+		tn := <-taskChan
 
-		//set up the args
-		args := new(DoTaskArgs)
-		args.JobName = jobName
-		if phase == mapPhase {
-			args.File = mapFiles[taskNum]
-		}
-		args.Phase = phase
-		args.TaskNumber = taskNum
-		args.NumOtherPhase = n_other
-
-		fmt.Printf("now proccessing the args:{%v,%v,%v,%v}\n", args.JobName, args.Phase, args.TaskNumber, args.NumOtherPhase)
+		//add a object to the wg for waiting new task
+		wg.Add(1)
 		//split the tasks into different go routine
-		go func() {
-			//add a object to the wg for waiting new task
-			wg.Add(1)
+		go func(taskNum int) {
 			for {
 				//get the workers from registerChan
 				worker := <-registerChan
-				fmt.Printf("Worker received: %s doing task-%d %s---working on the file:%s\n", worker, i, phase, mapFiles[taskNum])
+				fmt.Printf("Worker received: %s doing task-%d %s---working on the file:%s\n", worker, tn, phase, mapFiles[taskNum])
 
 				//call the rpc
 				//conf: whether the doarg should be pointer???
-				ok := call(worker, "Worker.DoTask", args, nil)
+				ok := call(worker, "Worker.DoTask", argsSpace[taskNum], nil)
 				// the call func is finish successfully
 				if ok {
 					// done a waiting group object
 					wg.Done()
 					//give back the worker to channel
 					registerChan <- worker
-					fmt.Printf("Worker done: %s finished task-%d %s\n", worker, i, phase)
+					fmt.Printf("Worker done: %s finished task-%d %s\n", worker, tn, phase)
 					break
 				} else {
+					//give back the task num to the taskChan
+					taskChan <- tn
+					//give back the worker to channel
+					registerChan <- worker
 					fmt.Println("give back the worker")
+					break
 				}
 			}
-		}()
+		}(tn)
+		if len(taskChan) == 0 {
+			break
+		}
 	}
 	//wait for all the routines done
 	wg.Wait()

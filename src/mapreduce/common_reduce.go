@@ -112,7 +112,7 @@ func doReduce(
 		}
 	} else {
 		// fmt.Printf("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
-		debug("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
+		fmt.Printf("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
 	}
 	outputfile.Close()
 
