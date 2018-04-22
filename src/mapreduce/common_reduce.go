@@ -57,14 +57,17 @@ func doReduce(
 	fileDecs := make([]*json.Decoder, nMap)
 	//for the decode result
 	keyValues := make(map[string][]string)
-	fmt.Println("\n----------------reduce part sta----------------------")
-	fmt.Printf("The configuration is:nMap-%d, reduceTask-%d\n", nMap, reduceTask)
+	//fmt.Println("\n----------------reduce part sta----------------------")
+	debug("\n----------------reduce part sta----------------------\n")
+	// fmt.Printf("The configuration is:nMap-%d, reduceTask-%d\n", nMap, reduceTask)
+	debug("The configuration is:nMap-%d, reduceTask-%d\n", nMap, reduceTask)
 	for i := 0; i < nMap; i++ {
 		inputFile, err1 := os.Open(reduceName(jobName, i, reduceTask))
 		if err1 != nil {
 			fmt.Println(err1)
 		} else {
-			fmt.Printf("successfully open %s\n", reduceName(jobName, i, reduceTask))
+			// fmt.Printf("successfully open %s\n", reduceName(jobName, i, reduceTask))
+			debug("successfully open %s\n", reduceName(jobName, i, reduceTask))
 		}
 
 		//decode the input content to struct
@@ -84,7 +87,8 @@ func doReduce(
 				keyValues[kv.Key] = append(keyValues[kv.Key], kv.Value)
 			} else {
 				//finish loading all the content from inputfile x (there are nMap inputfiles)
-				fmt.Printf("finish!	successfully load %s\n", reduceName(jobName, i, reduceTask))
+				// fmt.Printf("finish!	successfully load %s\n", reduceName(jobName, i, reduceTask))
+				debug("finish!	successfully load %s\n", reduceName(jobName, i, reduceTask))
 				break
 			}
 		}
@@ -107,7 +111,8 @@ func doReduce(
 			encod.Encode(&KeyValue{k, reduceF(k, keyValues[k])})
 		}
 	} else {
-		fmt.Printf("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
+		// fmt.Printf("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
+		debug("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
 	}
 	outputfile.Close()
 

@@ -56,7 +56,8 @@ func doMap(
 	//
 	// Your code here (Part I).
 	//
-	fmt.Println("\n----------------map part sta----------------------")
+	// fmt.Println("\n----------------map part sta----------------------")
+	debug("\n----------------map part sta----------------------\n")
 
 	//------------read file s----------------------
 	//load the file contents to the "contents"
@@ -64,7 +65,8 @@ func doMap(
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		fmt.Println("\nopen file success!")
+		// fmt.Println("\nopen file success!")
+		debug("open file success\n!")
 	}
 	//get the length of file
 	fi, _ := file.Stat()
@@ -89,7 +91,8 @@ func doMap(
 			filesEnc[i] = json.NewEncoder(f)
 			//store the reduce-file-info to the files
 			files[i] = f
-			fmt.Printf("now processing the map result file:%s\n", f.Name())
+			// fmt.Printf("now processing the map result file:%s\n", f.Name())
+			debug("now processing the map result file:%s\n", f.Name())
 		} else {
 			fmt.Print(err1)
 		}
