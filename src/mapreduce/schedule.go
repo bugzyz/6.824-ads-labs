@@ -45,47 +45,60 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 		//load the unifished task num
 		taskChan <- i
 	}
+	//print RegisterChan status
+	fmt.Printf("The registerChan has cap:%v len:%v\n", cap(registerChan), len(registerChan))
 	//for each task in ntasks
 	for {
-		//task num-tn
-		//now we are doing the tn
-		tn := <-taskChan
+		for len(taskChan) > 0 {
 
-		//add a object to the wg for waiting new task
-		wg.Add(1)
-		//split the tasks into different go routine
-		go func(taskNum int) {
-			for {
-				//get the workers from registerChan
-				worker := <-registerChan
-				fmt.Printf("Worker received: %s doing task-%d %s---working on the file:%s\n", worker, tn, phase, mapFiles[taskNum])
+			//add a object to the wg for waiting new task
+			wg.Add(1)
+
+			//get the workers from registerChan
+			worker := <-registerChan
+			//task num-tn
+			//now we are doing the tn
+			tn := <-taskChan
+			task := argsSpace[tn]
+			//split the tasks into different go routine
+			go func(taskNum int) {
 
 				//call the rpc
-				//conf: whether the doarg should be pointer???
-				ok := call(worker, "Worker.DoTask", argsSpace[taskNum], nil)
+				ok := call(worker, "Worker.DoTask", &task, nil)
 				// the call func is finish successfully
-				if ok {
-					// done a waiting group object
-					wg.Done()
-					//give back the worker to channel
-					registerChan <- worker
+				if ok == true {
+
 					fmt.Printf("Worker done: %s finished task-%d %s\n", worker, tn, phase)
-					break
 				} else {
 					//give back the task num to the taskChan
 					taskChan <- tn
-					//give back the worker to channel
-					registerChan <- worker
-					fmt.Println("give back the worker")
-					break
+					fmt.Printf("give back the worker:%s\n", worker)
 				}
-			}
-		}(tn)
+
+				fmt.Println("ready to done!")
+				// done a waiting group object
+				wg.Done()
+
+				//print RegisterChan status
+				fmt.Printf("The registerChan has cap:%v len:%v\n", cap(registerChan), len(registerChan))
+
+				fmt.Println("ready to release worker!")
+
+				//give back the worker to channel
+				registerChan <- worker
+
+				//print RegisterChan status
+				fmt.Printf("The registerChan has cap:%v len:%v\n", cap(registerChan), len(registerChan))
+
+			}(tn)
+		}
+		//wait for all the routines done
+		wg.Wait()
 		if len(taskChan) == 0 {
 			break
 		}
 	}
-	//wait for all the routines done
-	wg.Wait()
+
+	close(taskChan)
 	fmt.Printf("Schedule: %v done\n", phase)
 }
