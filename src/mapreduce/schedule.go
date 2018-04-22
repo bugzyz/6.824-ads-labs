@@ -34,38 +34,49 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	// Your code here (Part III, Part IV).
 	//
 
-	fmt.Printf("%v%v%v%v\n", jobName, mapFiles, phase, n_other)
 	//set a waitGroup to wait for map\reduce phase done
 	var wg sync.WaitGroup
 
 	//for each task in ntasks
 	for i := 0; i < ntasks; i++ {
+		taskNum := i
 
+		//set up the args
+		args := new(DoTaskArgs)
+		args.JobName = jobName
+		if phase == mapPhase {
+			args.File = mapFiles[taskNum]
+		}
+		args.Phase = phase
+		args.TaskNumber = taskNum
+		args.NumOtherPhase = n_other
+
+		fmt.Printf("now proccessing the args:{%v,%v,%v,%v}\n", args.JobName, args.Phase, args.TaskNumber, args.NumOtherPhase)
 		//split the tasks into different go routine
-		go func(jobName string, file string, phase jobPhase, taskNumber int, numberOfInput int) {
+		go func() {
 			//add a object to the wg for waiting new task
 			wg.Add(1)
 			for {
 				//get the workers from registerChan
 				worker := <-registerChan
-				fmt.Printf("Worker received: %s\n", worker)
-				//create the Args for call()
-				doArgs := DoTaskArgs{JobName: jobName, File: file, Phase: phase, TaskNumber: taskNumber, NumOtherPhase: numberOfInput}
+				fmt.Printf("Worker received: %s doing task-%d %s---working on the file:%s\n", worker, i, phase, mapFiles[taskNum])
+
 				//call the rpc
 				//conf: whether the doarg should be pointer???
-				ok := call(worker, "Worker.DoTask", &doArgs, nil)
+				ok := call(worker, "Worker.DoTask", args, nil)
 				// the call func is finish successfully
 				if ok {
 					// done a waiting group object
 					wg.Done()
 					//give back the worker to channel
 					registerChan <- worker
+					fmt.Printf("Worker done: %s finished task-%d %s\n", worker, i, phase)
 					break
 				} else {
-					registerChan <- worker
+					fmt.Println("give back the worker")
 				}
 			}
-		}(jobName, mapFiles[i], phase, i, n_other)
+		}()
 	}
 	//wait for all the routines done
 	wg.Wait()
