@@ -52,17 +52,7 @@ func reduceF(key string, values []string) string {
 	}
 	//return result
 	var res string
-	// res = key + string(": ") + strconv.Itoa(len(values)) + string(" ") + docuNames
 	res = strconv.Itoa(len(values)) + string(" ") + docuNames
-
-	//print info
-	if reduceCount > 0 {
-		fmt.Println("reduceF receive key-values:")
-		fmt.Printf("%v-%v\n", key, values)
-		fmt.Println("reduceF result here:")
-		fmt.Println(res)
-		reduceCount--
-	}
 	return res
 
 }
