@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"mapreduce"
 	"os"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
 //
@@ -15,6 +18,19 @@ import (
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
 	// Your code here (Part II).
+	// create keyValue array
+	kvs := make([]mapreduce.KeyValue, 0)
+	words := strings.FieldsFunc(contents, checkWord)
+	//append those single word to the return keyvalues
+	for _, v := range words {
+		kvs = append(kvs, mapreduce.KeyValue{v, "1"})
+	}
+	return kvs
+}
+
+//for the strings.FieldsFunc
+func checkWord(c rune) bool {
+	return !unicode.IsLetter(c) && !unicode.IsNumber(c)
 }
 
 //
@@ -24,6 +40,8 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 //
 func reduceF(key string, values []string) string {
 	// Your code here (Part II).
+	//return the number of the sorted same word
+	return strconv.Itoa(len(values))
 }
 
 // Can be run in 3 ways:

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 )
 
 func doReduce(
@@ -51,19 +52,68 @@ func doReduce(
 	// Your code here (Part I).
 	//
 
+	//-----------------------load the map-result-files to the keyValues--------
 	//open the input file
-	for i :=0;i<nMap;i++{
-	inputFile,err1 := os.Open(reduceName(jobName,nMap,reduceTask))
-	if err1 != nil {
-		fmt.Println(err1)
+	fileDecs := make([]*json.Decoder, nMap)
+	//for the decode result
+	keyValues := make(map[string][]string)
+	//fmt.Println("\n----------------reduce part sta----------------------")
+	debug("\n----------------reduce part sta----------------------\n")
+	// fmt.Printf("The configuration is:nMap-%d, reduceTask-%d\n", nMap, reduceTask)
+	debug("The configuration is:nMap-%d, reduceTask-%d\n", nMap, reduceTask)
+	for i := 0; i < nMap; i++ {
+		inputFile, err1 := os.Open(reduceName(jobName, i, reduceTask))
+		if err1 != nil {
+			fmt.Println(err1)
+		} else {
+			// fmt.Printf("successfully open %s\n", reduceName(jobName, i, reduceTask))
+			debug("successfully open %s\n", reduceName(jobName, i, reduceTask))
+		}
+
+		//decode the input content to struct
+		fileDecs[i] = json.NewDecoder(inputFile)
+		//decode contents from inputfile
+		for ii := 0; ; ii++ {
+			//make a temp KeyValue to store intermidiate data
+			var kv KeyValue
+			ok := fileDecs[i].Decode(&kv)
+
+			if ok == nil {
+				//if the keyValues didn;t exist a key
+				if _, okk := keyValues[kv.Key]; !okk {
+					keyValues[kv.Key] = make([]string, 0)
+				}
+				//append the values to keyValues[kv.Key]
+				keyValues[kv.Key] = append(keyValues[kv.Key], kv.Value)
+			} else {
+				//finish loading all the content from inputfile x (there are nMap inputfiles)
+				// fmt.Printf("finish!	successfully load %s\n", reduceName(jobName, i, reduceTask))
+				debug("finish!	successfully load %s\n", reduceName(jobName, i, reduceTask))
+				break
+			}
+		}
+		//close the input file
+		inputFile.Close()
 	}
-	fileInfo, err2 := inputFile.Stat()
-	if err2 != nil{
-		fmt.Println(err1)		
+
+	//-------------------traverse the keyValues to run the reduceF()----------
+	keys := make([]string, 0)
+	//transfer the keys to string[] "keys" to sort the keys
+	for k := range keyValues {
+		keys = append(keys, k)
 	}
-	fileDec:=make([]*json.Decoder,fileInfo.Size())
-	for i,tempDecoder := range fileDec {
-		tempDecoder.Decode()
+	sort.Strings(keys)
+
+	outputfile, err := os.Create(mergeName(jobName, reduceTask))
+	if err == nil {
+		encod := json.NewEncoder(outputfile)
+		for _, k := range keys {
+			encod.Encode(&KeyValue{k, reduceF(k, keyValues[k])})
+		}
+	} else {
+		// fmt.Printf("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
+		fmt.Printf("failed to create the reduce output file:%s\n", mergeName(jobName, reduceTask))
 	}
-}
+	outputfile.Close()
+
 }

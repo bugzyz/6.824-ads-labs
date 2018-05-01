@@ -56,9 +56,8 @@ func doMap(
 	//
 	// Your code here (Part I).
 	//
-	fmt.Println(inFile)
-	fmt.Println(nReduce)
-	fmt.Println(mapTask)
+	// fmt.Println("\n----------------map part sta----------------------")
+	debug("\n----------------map part sta----------------------\n")
 
 	//------------read file s----------------------
 	//load the file contents to the "contents"
@@ -66,7 +65,8 @@ func doMap(
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		fmt.Println("\nopen file success!")
+		// fmt.Println("\nopen file success!")
+		debug("open file success\n!")
 	}
 	//get the length of file
 	fi, _ := file.Stat()
@@ -83,14 +83,16 @@ func doMap(
 	files := make([]*os.File, nReduce)
 
 	//set the name of the reduce-input-file
-	for i := range filesEnc {
+	// for i := range filesEnc {
+	for i := 0; i < nReduce; i++ {
 		f, err1 := os.Create(reduceName(jobName, mapTask, i))
-		fmt.Println(f.Name())
 		if err1 == nil {
 			//set the target file info to the encoder
 			filesEnc[i] = json.NewEncoder(f)
 			//store the reduce-file-info to the files
 			files[i] = f
+			// fmt.Printf("now processing the map result file:%s\n", f.Name())
+			debug("now processing the map result file:%s\n", f.Name())
 		} else {
 			fmt.Print(err1)
 		}
@@ -100,17 +102,12 @@ func doMap(
 	for _, v := range kv {
 		//write the value of the map result to the encoder
 		err2 := filesEnc[ihash(v.Key)%nReduce].Encode(&v)
-		//debug
-		// fmt.Print("check:")
-		// fmt.Println(ihash(v.Key))
+
 		if err2 != nil {
 			fmt.Print("error:")
 			fmt.Println(err2)
 		}
 	}
-	//debug
-	fmt.Println(nReduce)
-	fmt.Println(len(filesEnc))
 
 	//close the files that opened to write reduce-input-data
 	for _, f := range files {
