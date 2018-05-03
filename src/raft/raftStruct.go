@@ -24,9 +24,9 @@ type AppendEntriesArgs struct {
 }
 
 type AppendEntriesReply struct {
-	Term         int
-	Success      bool
-	nextTryIndex int
+	Term    int
+	Success bool
+	//nextTryIndex int
 }
 
 //-------appendEntry end-------
