@@ -158,6 +158,7 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+
 }
 
 //
@@ -250,6 +251,22 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+	rf.currentTerm = 0
+	rf.voteCount = 0
+	rf.votedFor = -1
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+	rf.status = Follower
+	rf.applyCh = applyCh
+	rf.electWin = make(chan bool)
+	rf.granted = make(chan bool)
+	rf.heartbeat = make(chan bool)
+	rf.logs = append(rf.logs, LogEntry{Term: 0})
 
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
+	rf.persist()
+
+	go rf.runServer()
 	return rf
 }
