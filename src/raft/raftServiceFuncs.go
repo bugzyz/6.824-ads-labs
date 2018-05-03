@@ -6,14 +6,17 @@ import (
 )
 
 func (rf *Raft) runServer() {
+	DPrintf("The num-%v raft server start election goroutine\n", rf.me)
 	for {
 		switch rf.status {
 		case Leader:
+			DPrintf("Raft-%v now in switch-leader\n", rf.me)
 			//sending heartbeat to follower
-			rf.sendAllAppendEntries()
+			rf.sendAllHeartbeat()
 			time.Sleep(time.Millisecond * 120)
 
 		case Follower:
+			DPrintf("Raft-%v now in switch-follower\n", rf.me)
 			select {
 			//receive a vote request
 			case <-rf.granted:
@@ -21,10 +24,13 @@ func (rf *Raft) runServer() {
 			case <-rf.heartbeat:
 			//timeout
 			case <-time.After(time.Millisecond * time.Duration(rand.Intn(200)+300)):
+				rf.mu.Lock()
 				rf.status = Candidate
+				rf.mu.Unlock()
 			}
 
 		case Candidate:
+			DPrintf("Raft-%v now in switch-candidate\n", rf.me)
 			rf.mu.Lock()
 			rf.currentTerm++
 			rf.votedFor = rf.me
@@ -41,7 +47,9 @@ func (rf *Raft) runServer() {
 			case <-time.After(time.Millisecond * time.Duration(rand.Intn(200)+300)):
 			//other become the leader and start to send heartbeat
 			case <-rf.heartbeat:
+				rf.mu.Lock()
 				rf.status = Follower
+				rf.mu.Unlock()
 			//election success
 			case <-rf.electWin:
 				rf.mu.Lock()
@@ -54,5 +62,16 @@ func (rf *Raft) runServer() {
 
 //to do: the goroutine function for checking whether rf's election win
 func (rf *Raft) checkElectionWin() {
+
+}
+
+func (rf *Raft) candidatesLogIsUp2Date(argsTerm int, argsIndex int) bool {
+	rfLastTerm := rf.getLastLogTerm()
+	rfLastIndex := rf.getLastLogIndex()
+
+	if argsTerm != rfLastTerm {
+		return argsTerm > rfLastTerm
+	}
+	return argsIndex >= rfLastIndex
 
 }

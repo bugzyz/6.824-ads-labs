@@ -5,8 +5,36 @@ package raft
 /*----------------------------------------------------------*/
 
 //send appendEntry to each raft
-func (rf *Raft) sendAllAppendEntries() {
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.heartbeat <- true
 }
+
+func (rf *Raft) sendAllAppendEntries() {
+
+}
+
+//-----------------------heartbeat rpc sta----------------------
+
+//for the RPC to make each raft get heartbeat
+func (rf *Raft) ReceiveHB(args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	rf.heartbeat <- true
+	return true
+}
+
+func (rf *Raft) sendHeartbeat(server int) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", new(AppendEntriesArgs), new(AppendEntriesReply))
+	return ok
+}
+
+func (rf *Raft) sendAllHeartbeat() {
+	for i := range rf.peers {
+		if i != rf.me && rf.status == Leader {
+			go rf.sendHeartbeat(i)
+		}
+	}
+}
+
+//-----------------------heartbeat rpc end----------------------
 
 //send votes request to each raft
 func (rf *Raft) sendAllRequestVotes() {
@@ -22,9 +50,39 @@ func (rf *Raft) sendAllRequestVotes() {
 	//because the rpc call is a waiting call so use a goroutine to call
 	for serverNum := range rf.peers {
 		if serverNum != rf.me && rf.status == Candidate {
-			go rf.sendRequestVote(serverNum, args, new(RequestVoteReply))
+			go rf.sendRequestVoteAndDetectElectionWin(serverNum, args, new(RequestVoteReply))
 		}
 	}
+}
+
+//A detection function including the sendRequestVote function
+//rf-the raft that send vote request
+func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+	//this function will wait until the reply is filled
+	ok := rf.sendRequestVote(serverNum, args, reply)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	//return the failed ok
+	if !ok {
+		return ok
+	}
+	//successfully return ok:true
+	//but return a greater term
+	if reply.Term > rf.currentTerm {
+		rf.status = Follower
+		rf.currentTerm = reply.Term
+		rf.votedFor = -1
+		return ok
+	}
+	if reply.VoteGranted {
+		rf.voteCount++
+		if rf.voteCount > len(rf.peers)/2 {
+			rf.status = Leader
+			rf.electWin <- true
+		}
+	}
+	return ok
 }
 
 //get last log's term

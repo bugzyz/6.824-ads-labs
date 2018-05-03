@@ -70,6 +70,7 @@ type Raft struct {
 	voteCount int
 	applyCh   chan ApplyMsg
 	electWin  chan bool
+	//a channel for telling the folower waiting that it receives a eletion and vote
 	granted   chan bool
 	heartbeat chan bool
 }
@@ -155,9 +156,31 @@ type RequestVoteReply struct {
 
 //
 // example RequestVote RPC handler.
-//
+// rf-the raft instance that receive vote request
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	// because the rf.status may change so we need lock
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	//the requestVote rule1
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	}
+
+	reply.Term = rf.currentTerm
+	reply.VoteGranted = false
+
+	//the requestVote rule2
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.candidatesLogIsUp2Date(args.LastLogTerm, args.LastLogIndex) {
+		//use a channel to tell raft that someone has start a election
+		rf.granted <- true
+		//set the reply
+		reply.VoteGranted = true
+		rf.votedFor = args.CandidateId
+	}
 
 }
 
