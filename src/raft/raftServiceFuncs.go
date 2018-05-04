@@ -10,13 +10,13 @@ func (rf *Raft) runServer() {
 	for {
 		switch rf.status {
 		case Leader:
-			DPrintf("Raft-%v now in switch-leader\n", rf.me)
+			DPrintf("Raft-%v now in switch-leader: term-%v\n", rf.me, rf.currentTerm)
 			//sending heartbeat to follower
 			rf.sendAllHeartbeat()
 			time.Sleep(time.Millisecond * 120)
 
 		case Follower:
-			DPrintf("Raft-%v now in switch-follower\n", rf.me)
+			DPrintf("Raft-%v now in switch-follower: term-%v\n", rf.me, rf.currentTerm)
 			select {
 			//receive a vote request
 			case <-rf.granted:
@@ -30,7 +30,7 @@ func (rf *Raft) runServer() {
 			}
 
 		case Candidate:
-			DPrintf("Raft-%v now in switch-candidate\n", rf.me)
+			DPrintf("Raft-%v now in switch-candidate: term-%v\n", rf.me, rf.currentTerm)
 			rf.mu.Lock()
 			rf.currentTerm++
 			rf.votedFor = rf.me

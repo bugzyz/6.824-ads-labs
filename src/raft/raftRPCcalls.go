@@ -9,8 +9,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.heartbeat <- true
 }
 
-func (rf *Raft) sendAllAppendEntries() {
+func (rf *Raft) sendAppendEntries(server int) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", new(AppendEntriesArgs), new(AppendEntriesReply))
+	return ok
+}
 
+func (rf *Raft) sendAllAppendEntries() {
+	for i := range rf.peers {
+		if i != rf.me && rf.status == Leader {
+			go rf.sendAppendEntries(i)
+		}
+	}
 }
 
 //-----------------------heartbeat rpc sta----------------------
