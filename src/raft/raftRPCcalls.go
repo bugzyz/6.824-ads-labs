@@ -6,18 +6,51 @@ package raft
 
 //send appendEntry to each raft
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.heartbeat <- true
+	//DPrintf("The num-%v receive a rpc heartbeatcall & send himself HB\n", rf.me)
+	DPrintf("The num-%v receive a HB-{term-%v,leaderId-%v}\n", rf.me, args.Term, args.LeaderId)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	reply.Success = false
+	reply.Term = rf.currentTerm
+	if rf.currentTerm <= args.Term {
+		rf.heartbeat <- true
+		reply.Success = true
+		reply.Term = args.Term
+
+		//update the receiver raft status
+		rf.status = Follower
+		rf.currentTerm = args.Term
+
+		DPrintf("The num-%v switch back to follower now{term-%v}\n", rf.me, rf.currentTerm)
+	} else {
+		DPrintf("The num-%v have a greater term(args:%v < rf:%v) than HB\n", rf.me, args.Term, rf.currentTerm)
+
+	}
 }
 
-func (rf *Raft) sendAppendEntries(server int) bool {
-	ok := rf.peers[server].Call("Raft.AppendEntries", new(AppendEntriesArgs), new(AppendEntriesReply))
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
 }
 
 func (rf *Raft) sendAllAppendEntries() {
+
+	DPrintf("now %v is ready to lock", rf.me)
+
+	rf.mu.Lock()
+	DPrintf("now lock the sending heartbeat server-%v and create appendentries request", rf.me)
+	defer rf.mu.Unlock()
+
+	args := new(AppendEntriesArgs)
+	args.Term = rf.currentTerm
+	args.LeaderId = rf.me
+
+	DPrintf("---Num-%v raft Creating a appendEntries request-{term-%v,leaderId-%v}\n", rf.me, args.Term, args.LeaderId)
+
 	for i := range rf.peers {
 		if i != rf.me && rf.status == Leader {
-			go rf.sendAppendEntries(i)
+			go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
 		}
 	}
 }
@@ -36,11 +69,8 @@ func (rf *Raft) sendHeartbeat(server int) bool {
 }
 
 func (rf *Raft) sendAllHeartbeat() {
-	for i := range rf.peers {
-		if i != rf.me && rf.status == Leader {
-			go rf.sendHeartbeat(i)
-		}
-	}
+	DPrintf("num-%v sendding heartbeat", rf.me)
+	rf.sendAllAppendEntries()
 }
 
 //-----------------------heartbeat rpc end----------------------
@@ -48,13 +78,13 @@ func (rf *Raft) sendAllHeartbeat() {
 //send votes request to each raft
 func (rf *Raft) sendAllRequestVotes() {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	//init request vote args
 	args := new(RequestVoteArgs)
 	args.Term = rf.currentTerm
 	args.CandidateId = rf.me
 	args.LastLogIndex = rf.getLastLogIndex()
 	args.LastLogTerm = rf.getLastLogTerm()
-	rf.mu.Unlock()
 
 	//because the rpc call is a waiting call so use a goroutine to call
 	for serverNum := range rf.peers {
@@ -78,12 +108,15 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 	}
 	//successfully return ok:true
 	//but return a greater term
-	if reply.Term > rf.currentTerm {
+	if reply.Term >= rf.currentTerm {
+		DPrintf("rf-%v receive a term greater than rf-curTerm reply:%v rf-cuTem:%v", rf.me, reply.Term, rf.currentTerm)
+
 		rf.status = Follower
 		rf.currentTerm = reply.Term
 		rf.votedFor = -1
 		return ok
 	}
+	DPrintf("rf-%v receive a voteRequest reply:%v", rf.me, reply.VoteGranted)
 	if reply.VoteGranted {
 		rf.voteCount++
 		if rf.voteCount > len(rf.peers)/2 {

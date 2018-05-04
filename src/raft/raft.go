@@ -82,8 +82,8 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	// rf.mu.Lock()
+	// defer rf.mu.Unlock()
 
 	if rf.status == Leader {
 		isleader = true
@@ -91,6 +91,7 @@ func (rf *Raft) GetState() (int, bool) {
 		isleader = false
 	}
 	term = rf.currentTerm
+	DPrintf("---------------------------------------\nthe tester check getstate() of rf-%v , isLeader?:%v\n---------------------------------------", rf.me, isleader)
 	return term, isleader
 }
 
@@ -168,6 +169,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
+	}
+
+	// Convert to follower state if term > currentTerm
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.status = Follower
+		rf.votedFor = -1
 	}
 
 	reply.Term = rf.currentTerm

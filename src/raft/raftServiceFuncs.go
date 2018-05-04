@@ -10,13 +10,13 @@ func (rf *Raft) runServer() {
 	for {
 		switch rf.status {
 		case Leader:
-			DPrintf("Raft-%v now in switch-leader: term-%v\n", rf.me, rf.currentTerm)
+			DPrintf("Raft-%v switch-leader: term-%v\n", rf.me, rf.currentTerm)
 			//sending heartbeat to follower
 			rf.sendAllHeartbeat()
 			time.Sleep(time.Millisecond * 120)
 
 		case Follower:
-			DPrintf("Raft-%v now in switch-follower: term-%v\n", rf.me, rf.currentTerm)
+			DPrintf("Raft-%v switch-follower: term-%v\n", rf.me, rf.currentTerm)
 			select {
 			//receive a vote request
 			case <-rf.granted:
@@ -24,15 +24,13 @@ func (rf *Raft) runServer() {
 			case <-rf.heartbeat:
 			//timeout
 			case <-time.After(time.Millisecond * time.Duration(rand.Intn(200)+300)):
-				rf.mu.Lock()
 				rf.status = Candidate
-				rf.mu.Unlock()
 			}
 
 		case Candidate:
-			DPrintf("Raft-%v now in switch-candidate: term-%v\n", rf.me, rf.currentTerm)
 			rf.mu.Lock()
 			rf.currentTerm++
+			DPrintf("Raft-%v switch-candidate: term-%v\n", rf.me, rf.currentTerm)
 			rf.votedFor = rf.me
 			rf.persist()
 			rf.voteCount = 1
@@ -47,14 +45,10 @@ func (rf *Raft) runServer() {
 			case <-time.After(time.Millisecond * time.Duration(rand.Intn(200)+300)):
 			//other become the leader and start to send heartbeat
 			case <-rf.heartbeat:
-				rf.mu.Lock()
 				rf.status = Follower
-				rf.mu.Unlock()
 			//election success
 			case <-rf.electWin:
-				rf.mu.Lock()
 				rf.status = Leader
-				rf.mu.Unlock()
 			}
 		}
 	}
@@ -72,6 +66,7 @@ func (rf *Raft) candidatesLogIsUp2Date(argsTerm int, argsIndex int) bool {
 	if argsTerm != rfLastTerm {
 		return argsTerm > rfLastTerm
 	}
+	DPrintf("check up2date is %v", argsIndex >= rfLastIndex)
 	return argsIndex >= rfLastIndex
 
 }
