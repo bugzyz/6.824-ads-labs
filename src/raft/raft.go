@@ -23,8 +23,6 @@ import "labrpc"
 // import "bytes"
 // import "labgob"
 
-
-
 //
 // as each Raft peer becomes aware that successive log entries are
 // committed, the peer should send an ApplyMsg to the service (or
@@ -54,19 +52,40 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
+	// Persistant state on all servers
+	currentTerm int
+	votedFor    int
+	logs        []LogEntry
 
+	// Volatile state on all servers
+	commitIndex int
+	lastApplied int
+
+	// Volatile state on leaders
+	nextIndex  []int
+	matchIndex []int
+
+	// Others
+	status    int
+	voteCount int
+	applyCh   chan ApplyMsg
+	electWin  chan bool
+	//a channel for telling the folower waiting that it receives a eletion and vote
+	granted   chan bool
+	heartbeat chan bool
 }
 
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 
-	var term int
-	var isleader bool
 	// Your code here (2A).
-	return term, isleader
-}
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	DPrintf("---------------------------------------\nthe tester check getstate() of rf-%v , isLeader?:%v\n---------------------------------------", rf.me, rf.status == Leader)
+	return rf.currentTerm, rf.status == Leader
+}
 
 //
 // save Raft's persistent state to stable storage,
@@ -83,7 +102,6 @@ func (rf *Raft) persist() {
 	// data := w.Bytes()
 	// rf.persister.SaveRaftState(data)
 }
-
 
 //
 // restore previously persisted state.
@@ -107,15 +125,16 @@ func (rf *Raft) readPersist(data []byte) {
 	// }
 }
 
-
-
-
 //
 // example RequestVote RPC arguments structure.
 // field names must start with capital letters!
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term         int
+	CandidateId  int
+	LastLogIndex int
+	LastLogTerm  int
 }
 
 //
@@ -124,13 +143,45 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Term        int
+	VoteGranted bool
 }
 
 //
 // example RequestVote RPC handler.
-//
+// rf-the raft instance that receive vote request
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	// because the rf.status may change so we need lock
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	//the requestVote rule1
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	}
+
+	// Convert to follower state if term > currentTerm
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.status = Follower
+		rf.votedFor = -1
+	}
+
+	reply.Term = rf.currentTerm
+	reply.VoteGranted = false
+
+	//the requestVote rule2
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.candidatesLogIsUp2Date(args.LastLogTerm, args.LastLogIndex) {
+		//use a channel to tell raft that someone has start a election
+		rf.granted <- true
+		//set the reply
+		reply.VoteGranted = true
+		rf.votedFor = args.CandidateId
+	}
+
 }
 
 //
@@ -167,7 +218,6 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
-
 //
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
@@ -188,7 +238,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
-
 
 	return index, term, isLeader
 }
@@ -225,7 +274,22 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+	rf.currentTerm = 0
+	rf.voteCount = 0
+	rf.votedFor = -1
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+	rf.status = Follower
+	rf.applyCh = applyCh
+	rf.electWin = make(chan bool)
+	rf.granted = make(chan bool)
+	rf.heartbeat = make(chan bool)
+	rf.logs = append(rf.logs, LogEntry{Term: 0})
 
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
+	rf.persist()
 
+	go rf.runServer()
 	return rf
 }
