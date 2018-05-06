@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+//decide whether to prinbt
+const print = -1
+
 const (
 	color_red = uint8(iota + 91)
 	color_green
@@ -21,26 +24,41 @@ const (
 
 // see complete color rules in document in https://en.wikipedia.org/wiki/ANSI_escape_code#cite_note-ecma48-13
 func Trace(format string, a ...interface{}) {
+	if print < 0 {
+		return
+	}
 	prefix := yellow(trac)
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
 func Info(format string, a ...interface{}) {
+	if print < 0 {
+		return
+	}
 	prefix := blue(info)
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
 func Success(format string, a ...interface{}) {
+	if print < 0 {
+		return
+	}
 	prefix := green(succ)
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
 func Warning(format string, a ...interface{}) {
+	if print < 0 {
+		return
+	}
 	prefix := magenta(warn)
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
 func Error(format string, a ...interface{}) {
+	if print < 0 {
+		return
+	}
 	prefix := red(erro)
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
