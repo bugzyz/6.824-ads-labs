@@ -79,20 +79,12 @@ type Raft struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 
-	var term int
-	var isleader bool
 	// Your code here (2A).
-	// rf.mu.Lock()
-	// defer rf.mu.Unlock()
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
-	if rf.status == Leader {
-		isleader = true
-	} else {
-		isleader = false
-	}
-	term = rf.currentTerm
-	DPrintf("---------------------------------------\nthe tester check getstate() of rf-%v , isLeader?:%v\n---------------------------------------", rf.me, isleader)
-	return term, isleader
+	DPrintf("---------------------------------------\nthe tester check getstate() of rf-%v , isLeader?:%v\n---------------------------------------", rf.me, rf.status == Leader)
+	return rf.currentTerm, rf.status == Leader
 }
 
 //
