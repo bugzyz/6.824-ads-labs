@@ -52,24 +52,13 @@ func (rf *Raft) sendAllAppendEntries() {
 }
 
 //-----------------------heartbeat rpc sta----------------------
-
-//for the RPC to make each raft get heartbeat
-func (rf *Raft) ReceiveHB(args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	rf.heartbeat <- true
-	return true
-}
-
-func (rf *Raft) sendHeartbeat(server int) bool {
-	ok := rf.peers[server].Call("Raft.AppendEntries", new(AppendEntriesArgs), new(AppendEntriesReply))
-	return ok
-}
-
+//wrap the sendAppendEntries to heartbeat sending function
 func (rf *Raft) sendAllHeartbeat() {
 	DPrintf("num-%v sendding heartbeat", rf.me)
 	rf.sendAllAppendEntries()
 }
 
-//-----------------------heartbeat rpc end----------------------
+//-----------------------vote request rpc sta----------------------
 
 //send votes request to each raft
 func (rf *Raft) sendAllRequestVotes() {
@@ -103,7 +92,9 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 		return ok
 	}
 
-	//the rf become a leader\eleciton timeout and start a new candidate proccess
+	//the rf become a leader so we don't need the rf.electWin <- below
+	//eleciton timeout
+	//start a new candidate proccess
 	if rf.status != Candidate || args.Term != rf.currentTerm {
 		return ok
 	}
