@@ -14,10 +14,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Success = false
 
+	//old leader "sending" args
+	//raft with recognization of the new leader "receive" this args
+	//the old leader(failure or delay so there is a another true leader now)
+	//the old leader send the request args with lesser than follower's currentTerm
+	//just return the upToDate term to the fake old leader
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		return
 	}
+
+	//new leader first time "sending" heartbeat to follower/candidate who is normal or wake up from a failure/delay
+	//now the rf is a follower or candidator
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.status = Follower
