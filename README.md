@@ -19,9 +19,9 @@ And the dev branch is a branch maintaining the latest progress which follows the
 - [x] Lab 1: MapReduce
 -----------------------------
 - [ ] Lab 2: Raft Consensus Algorithm
-- [x]  part2A
-- [ ]  part2B
-- [ ]  part2C
+- [x]  Lab 2-part2A
+- [ ]  Lab 2-part2B
+- [ ]  Lab 2-part2C
 -----------------------------
 - [ ] Lab 3: Fault-tolerant Key/Value Service
 -----------------------------
