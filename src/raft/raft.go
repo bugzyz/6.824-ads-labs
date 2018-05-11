@@ -238,7 +238,12 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
-
+	isLeader = rf.status == Leader
+	if isLeader {
+		term = rf.currentTerm
+		index = rf.getLastLogIndex() + 1
+		rf.logs = append(rf.logs, LogEntry{term, command})
+	}
 	return index, term, isLeader
 }
 

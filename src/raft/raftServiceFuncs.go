@@ -50,6 +50,18 @@ func (rf *Raft) runServer() {
 				rf.mu.Lock()
 				Success("Candidate raft-%v:%v become leader with vote:%v", rf.me, rf.currentTerm, rf.voteCount)
 				rf.status = Leader
+
+				//reset the nextIndex records
+				rf.nextIndex = make([]int, len(rf.peers))
+				rf.matchIndex = make([]int, len(rf.peers))
+
+				nxtIdx := rf.getLastLogIndex() + 1
+
+				//update the nextIndex of different server based on the leader's nextIndex
+				for serverNum := range rf.peers {
+					rf.nextIndex[serverNum] = nxtIdx
+				}
+
 				rf.mu.Unlock()
 			}
 		}
