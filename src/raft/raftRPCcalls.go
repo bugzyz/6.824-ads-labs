@@ -144,6 +144,55 @@ func conflicted(flwrLogs []LogEntry, ldrLogs []LogEntry) bool {
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	//todo: update the information based on reply
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	//if the rf is no longer the leader then return
+	if !ok || rf.status != Leader || args.Term != rf.currentTerm {
+		return ok
+	}
+
+	//if reply return a greater term than rf then the leader turn back to follower
+	if reply.Term > rf.currentTerm {
+		rf.status = Follower
+		rf.votedFor = -1
+		rf.currentTerm = reply.Term
+		return ok
+	}
+
+	if reply.Success {
+		//if success it means the follower has the same log entry as the leader
+		//match index array update
+		rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries)
+		//next index array update
+		rf.nextIndex[server] = rf.matchIndex[server] + 1
+	} else {
+		//if false it means it should update the nextIndex by the return nextTryIndex to send the correct log entries in next heartbeat sending
+		rf.nextIndex[server] = reply.nextTryIndex
+	}
+
+	//now decide whether the log entries can be commit based on the majority
+	for N := rf.getLastLogIndex(); N > rf.commitIndex; N-- {
+		//conf: the WBZ use the voteCount = 1? but the if block below count the leader itself while the rf.peers includes leader.me
+		voteCount := 0
+		//the leader only commit the log entries create by its currentTerm
+		if rf.logs[N].Term == rf.currentTerm {
+			for i := range rf.peers {
+				//if the matchIndex has a greater match index then it means log enries is in the follower's
+				if rf.matchIndex[i] >= N {
+					voteCount++
+				}
+			}
+		}
+
+		if voteCount > len(rf.peers)/2 {
+			rf.commitIndex = N
+			go rf.commitLogs()
+			break
+		}
+	}
+
 	return ok
 }
 
