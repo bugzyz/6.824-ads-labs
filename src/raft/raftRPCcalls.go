@@ -21,7 +21,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	//just return the upToDate term to the fake old leader
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
-		reply.nextTryIndex = rf.getLastLogIndex() + 1
+		reply.NextTryIndex = rf.getLastLogIndex() + 1
 		return
 	}
 
@@ -47,7 +47,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	*/
 	//set the prevLogIndex to the nextIndex of rf.logs
 	if args.PrevLogIndex > rf.getLastLogIndex() {
-		reply.nextTryIndex = rf.getLastLogIndex() + 1
+		reply.NextTryIndex = rf.getLastLogIndex() + 1
 		return
 	}
 
@@ -69,15 +69,23 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		//term == 5
 		term := rf.logs[args.PrevLogIndex].Term
 
-		for reply.nextTryIndex = args.PrevLogIndex - 1; reply.nextTryIndex > 0 && rf.logs[reply.nextTryIndex].Term == term; reply.nextTryIndex-- {
+		for reply.NextTryIndex = args.PrevLogIndex - 1; reply.NextTryIndex > 0 && rf.logs[reply.NextTryIndex].Term == term; reply.NextTryIndex-- {
 		}
 
-		reply.nextTryIndex++
+		reply.NextTryIndex++
 	} else {
 		//only needs to replicate the succeeding logEntries
+
+		//debug
+		Success("rf-%v in its appendEntires func with previous logs:%v and args.entries:%v and commitIndex/lastApplied:%v/%v", rf.me, rf.logs, args.Entries, rf.commitIndex, rf.lastApplied)
+
 		//split
-		rf.logs = rf.logs[:args.PrevLogIndex+1]
 		rest := rf.logs[args.PrevLogIndex+1:]
+		rf.logs = rf.logs[:args.PrevLogIndex+1]
+
+		//debug
+		Success("rf-%v in its appendEntires func with rest:%v and logs:%v", rf.me, rest, rf.logs)
+
 		if conflicted(rest, args.Entries) || len(args.Entries) > len(rest) {
 			//conflicted or follower len lesser than leader's-just overwrite the logs
 			/*
@@ -87,6 +95,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rest3:			3344	0||1	result:	33445
 			*/
 			rf.logs = append(rf.logs, args.Entries...)
+			Error1("%v-raft conflicted and the rf.logs:%v, rest:%v args.entries:%v", rf.me, rf.logs, rest, args.Entries)
 		} else {
 			//no conflicted and the length of args.entries is lesser than follower's
 			//just let the follower's logs length greater than leader's since it hasn't been commited and will be overwrite after the leader's args.Enties larger than follower's logs
@@ -95,11 +104,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rest1:			334456	0||0	result:	334456
 			*/
 			rf.logs = append(rf.logs, rest...)
+			Error1("%v-raft NO---conflicted and the rf.logs:%v, rest:%v args.entries:%v", rf.me, rf.logs, rest, args.Entries)
 		}
 
 		//successfully append entries
 		reply.Success = true
-		reply.nextTryIndex = args.PrevLogIndex
+		reply.NextTryIndex = args.PrevLogIndex
 
 		// update follower's commitIndex if no conflict
 		if args.LeaderCommit > rf.commitIndex {
@@ -119,11 +129,19 @@ func (rf *Raft) commitLogs() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	//debug
+	var ApplyMsgsArr []ApplyMsg
+	Error("Raft-%v is in its commitLogs() with lastApplied:%v commitIndex:%v\n and the logs is %v", rf.me, rf.lastApplied, rf.commitIndex, rf.logs)
+
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-		rf.applyCh <- ApplyMsg{CommandIndex: i, Command: rf.logs[i].Command}
+		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i].Command}
+		//debug
+		ApplyMsgsArr = append(ApplyMsgsArr, ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i].Command})
 	}
 
 	rf.lastApplied = rf.commitIndex
+
+	Trace("Raft-%v commit new logs with commitIndex:%v and new commit applyMsgs:%v", rf.me, rf.commitIndex, ApplyMsgsArr)
 }
 
 //detect whether there is a conflict between follower's logs and leader's logs
@@ -169,13 +187,13 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		rf.nextIndex[server] = rf.matchIndex[server] + 1
 	} else {
 		//if false it means it should update the nextIndex by the return nextTryIndex to send the correct log entries in next heartbeat sending
-		rf.nextIndex[server] = reply.nextTryIndex
+		rf.nextIndex[server] = reply.NextTryIndex
 	}
 
 	//now decide whether the log entries can be commit based on the majority
 	for N := rf.getLastLogIndex(); N > rf.commitIndex; N-- {
-		//conf: the WBZ use the voteCount = 1? but the if block below count the leader itself while the rf.peers includes leader.me
-		voteCount := 0
+		//conf-solved: the WBZ use the voteCount = 1, while the leader won't update the matchIndex and prevlogIndex of itself, so the >= N should miss the leader voteCount itself
+		voteCount := 1
 		//the leader only commit the log entries create by its currentTerm
 		if rf.logs[N].Term == rf.currentTerm {
 			for i := range rf.peers {
@@ -188,6 +206,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 
 		if voteCount > len(rf.peers)/2 {
 			rf.commitIndex = N
+			Trace("update commitIndex and leader->commitLogs()")
 			go rf.commitLogs()
 			break
 		}
@@ -201,6 +220,10 @@ func (rf *Raft) sendAllAppendEntries() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	//debug
+	Trace("leader's nextIndex array:%v", rf.nextIndex)
+	Trace("leader's matchIndex array:%v", rf.matchIndex)
+
 	//each raft instance should receive different args
 	for i := range rf.peers {
 		//only when the rf is still the leader, the leader raft send appendEntries request
@@ -210,15 +233,15 @@ func (rf *Raft) sendAllAppendEntries() {
 			args.Term = rf.currentTerm
 			args.LeaderId = rf.me
 
+			//leader commit index
+			args.LeaderCommit = rf.commitIndex
+
 			//if the logs is empty:	prevLogIndex == -1
-			args.PrevLogIndex = rf.getLastLogIndex() - 1
+			args.PrevLogIndex = rf.nextIndex[i] - 1
 
 			//the logs isn't empty so the prevLogTerm can be found in the logs
 			if args.PrevLogIndex >= 0 {
 				args.PrevLogTerm = rf.logs[args.PrevLogIndex].Term
-			} else {
-				//printout the prevLogTerm when the args.PrevLogIndex = -1
-				Trace("raft-%v:	The args.prevlogTerm < 0 which means the logs is empty happen in the sendAllAppendEntries() and the PrevLogTerm==%v ", rf.me, args.PrevLogTerm)
 			}
 			//when the nextIndex of follower logs is lesser than leader.nextIndex, it means that the follower's log is incomplete
 			//when nextIndex greater than lastLogIndex, it means the follower's logs is up to date and the entries is a empty slice

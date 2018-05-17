@@ -233,9 +233,15 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	index := 0
+	term := 0
 	isLeader := true
+
+	//debug
+	Trace("call start() with %v", command)
 
 	// Your code here (2B).
 	isLeader = rf.status == Leader
