@@ -4,11 +4,8 @@ package raft
 /*this files is for the leader to send RPC call to each Raft*/
 /*----------------------------------------------------------*/
 
-//send appendEntry to each raft
+//AppendEntries apply log entries from leader
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	//DPrintf("The num-%v receive a rpc heartbeatcall & send himself HB\n", rf.me)
-	DPrintf("The num-%v receive a HB-{term-%v,leaderId-%v}", rf.me, args.Term, args.LeaderId)
-
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -21,6 +18,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	//just return the upToDate term to the fake old leader
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
+		reply.NextTryIndex = rf.getLastLogIndex() + 1
 		return
 	}
 
@@ -32,12 +30,176 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.votedFor = -1
 	}
 
+	//using the heartbeat channel to pass the heartbeat message to raft runServer() goroutine
 	rf.heartbeat <- true
 	reply.Term = rf.currentTerm
+
+	//if the logs from leaders is incomplete for the current raft than return the reply to get a complete logs for current raft
+	//return the failure reply for leader so the leader will decrement nextIndex and retry
+	//add the nextIndex to optimize the retry times
+	/*	incomplete: leader is trying to append index-6 but the follower last logs index is 2
+		index:			012345
+		leader-logs:	112223
+		follow-logs:	112
+	*/
+	//set the prevLogIndex to the nextIndex of rf.logs
+	if args.PrevLogIndex > rf.getLastLogIndex() {
+		reply.NextTryIndex = rf.getLastLogIndex() + 1
+		return
+	}
+
+	//now the args.prevLogIndex == rf.getLastLogIndex()+1, and the leader sending appendEntries of [] because the
+	/*
+			index			0123456
+			leader-logs:l1:	012
+			follow-logs:l2:	011111
+		the if-block below detect whether the l1[3].term == l2[3].term
+		if equal than only needs to replicate the succeeding logEntries
+		if unequal than needs more logEntires to replicate
+	*/
+	if args.PrevLogIndex > 0 && rf.logs[args.PrevLogIndex].Term != args.PrevLogTerm {
+		//needs more logEntires to replicate
+		//in this case the X == 2
+		/*for example
+		index			0123456
+		leader-logs:l1:	1133445
+		follow-logs:l2:	1122
+		*/
+		//so the leader needs to find out the previous conflicted term\index
+		//args.PrevLogTerm ==
+		//args.PrevLogIndex == 2
+		//term == 1
+		term := rf.logs[args.PrevLogIndex].Term
+
+		//to repeatly find out the prevous term logs and tell the leaders for asking more args.entries to modified its own uncommitted log
+		for reply.NextTryIndex = args.PrevLogIndex - 1; reply.NextTryIndex > 0 && rf.logs[reply.NextTryIndex].Term == term; reply.NextTryIndex-- {
+		}
+
+		reply.NextTryIndex++
+	} else {
+		//only needs to replicate the succeeding logEntries
+
+		//split
+		rest := rf.logs[args.PrevLogIndex+1:]
+		rf.logs = rf.logs[:args.PrevLogIndex+1]
+
+		if conflicted(rest, args.Entries) || len(args.Entries) > len(rest) {
+			//conflicted or follower len lesser than leader's-just overwrite the logs
+			/*
+				args.entries:	33445
+				rest1:			2244	1||1	result:	33445
+				rest2:			22445	1||0	result:	33445
+				rest3:			3344	0||1	result:	33445
+			*/
+			rf.logs = append(rf.logs, args.Entries...)
+		} else {
+			//no conflicted and the length of args.entries is lesser than follower's
+			//just let the follower's logs length greater than leader's since it hasn't been commited and will be overwrite after the leader's args.Enties larger than follower's logs
+			/*
+				args.entries:	33445
+				rest1:			334456	0||0	result:	334456
+				it's ok that the result is longer than the entries because the commitIndex records the real situation of the rf.logs
+			*/
+			rf.logs = append(rf.logs, rest...)
+		}
+
+		//successfully append entries
+		reply.Success = true
+		reply.NextTryIndex = args.PrevLogIndex
+
+		// update follower's commitIndex if no conflict
+		if args.LeaderCommit > rf.commitIndex {
+			if args.LeaderCommit <= rf.getLastLogIndex() {
+				rf.commitIndex = args.LeaderCommit
+			} else {
+				rf.commitIndex = rf.getLastLogIndex()
+			}
+
+			go rf.commitLogs()
+		}
+	}
+}
+
+//for server commit its logs
+func (rf *Raft) commitLogs() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		//the commandValid most be true otherwise the applyCh will ignore this applyMsg
+		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i].Command}
+	}
+
+	rf.lastApplied = rf.commitIndex
+}
+
+//detect whether there is a conflict between follower's logs and leader's logs
+//flwrLogs-follower's logs	ldrLogs-leader's logs
+func conflicted(flwrLogs []LogEntry, ldrLogs []LogEntry) bool {
+	for i := range flwrLogs {
+		//dont't let the ldrLogs access a possition out of bound
+		if i >= len(ldrLogs) {
+			break
+		}
+		if flwrLogs[i].Term != ldrLogs[i].Term {
+			return true
+		}
+	}
+	return false
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	//if the rf is no longer the leader then return
+	if !ok || rf.status != Leader || args.Term != rf.currentTerm {
+		return ok
+	}
+
+	//if reply return a greater term than rf then the leader turn back to follower
+	if reply.Term > rf.currentTerm {
+		rf.status = Follower
+		rf.votedFor = -1
+		rf.currentTerm = reply.Term
+		return ok
+	}
+
+	if reply.Success {
+		//if success it means the follower has the same log entry as the leader
+		//match index array update
+		rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries)
+		//next index array update
+		rf.nextIndex[server] = rf.matchIndex[server] + 1
+	} else {
+		//if false it means it should update the nextIndex by the return nextTryIndex to send the correct log entries in next heartbeat sending
+		rf.nextIndex[server] = reply.NextTryIndex
+	}
+
+	//now decide whether the log entries can be commit based on the majority
+	for N := rf.getLastLogIndex(); N > rf.commitIndex; N-- {
+		//conf-solved: the WBZ use the voteCount = 1, while the leader won't update the matchIndex and prevlogIndex of itself, so the >= N should miss the leader voteCount itself
+		voteCount := 1
+		//the leader only commit the log entries create by its currentTerm
+		if rf.logs[N].Term == rf.currentTerm {
+			for i := range rf.peers {
+				//if the matchIndex has a greater match index then it means log enries is in the follower's
+				if rf.matchIndex[i] >= N {
+					voteCount++
+				}
+			}
+		}
+
+		if voteCount > len(rf.peers)/2 {
+			rf.commitIndex = N
+			Trace("update commitIndex and leader->commitLogs()")
+			go rf.commitLogs()
+			break
+		}
+	}
+
 	return ok
 }
 
@@ -46,38 +208,45 @@ func (rf *Raft) sendAllAppendEntries() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	args := new(AppendEntriesArgs)
-	args.Term = rf.currentTerm
-	args.LeaderId = rf.me
-
-	DPrintf("---Num-%v raft Creating a appendEntries request-{term-%v,leaderId-%v}", rf.me, args.Term, args.LeaderId)
-
+	//each raft instance should receive different args
 	for i := range rf.peers {
+		//only when the rf is still the leader, the leader raft send appendEntries request
 		if i != rf.me && rf.status == Leader {
+			//create the append args
+			args := new(AppendEntriesArgs)
+			args.Term = rf.currentTerm
+			args.LeaderId = rf.me
+
+			//leader commit index
+			args.LeaderCommit = rf.commitIndex
+
+			//if the logs is empty:	prevLogIndex == 0
+			//with a {0, nil} in it
+			args.PrevLogIndex = rf.nextIndex[i] - 1
+
+			//the logs isn't empty so the prevLogTerm can be found in the logs
+			if args.PrevLogIndex >= 0 {
+				args.PrevLogTerm = rf.logs[args.PrevLogIndex].Term
+			}
+			//when the nextIndex of follower logs is lesser than leader.nextIndex, it means that the follower's log is incomplete
+			//when nextIndex greater than lastLogIndex, it means the follower's logs is up to date and the entries is a empty slice
+			if rf.nextIndex[i] <= rf.getLastLogIndex() {
+				args.Entries = rf.logs[rf.nextIndex[i]:]
+			}
+
 			go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
 		}
 	}
 }
 
 //-----------------------heartbeat rpc sta----------------------
-
-//for the RPC to make each raft get heartbeat
-func (rf *Raft) ReceiveHB(args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	rf.heartbeat <- true
-	return true
-}
-
-func (rf *Raft) sendHeartbeat(server int) bool {
-	ok := rf.peers[server].Call("Raft.AppendEntries", new(AppendEntriesArgs), new(AppendEntriesReply))
-	return ok
-}
-
+//wrap the sendAppendEntries to heartbeat sending function
 func (rf *Raft) sendAllHeartbeat() {
 	DPrintf("num-%v sendding heartbeat", rf.me)
 	rf.sendAllAppendEntries()
 }
 
-//-----------------------heartbeat rpc end----------------------
+//-----------------------vote request rpc sta----------------------
 
 //send votes request to each raft
 func (rf *Raft) sendAllRequestVotes() {
@@ -111,7 +280,9 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 		return ok
 	}
 
-	//the rf become a leader\eleciton timeout and start a new candidate proccess
+	//the rf become a leader so we don't need the rf.electWin <- below
+	//eleciton timeout
+	//start a new candidate proccess
 	if rf.status != Candidate || args.Term != rf.currentTerm {
 		return ok
 	}

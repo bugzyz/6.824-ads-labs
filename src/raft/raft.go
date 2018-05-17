@@ -83,7 +83,6 @@ func (rf *Raft) GetState() (int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("---------------------------------------\nthe tester check getstate() of rf-%v , isLeader?:%v\n---------------------------------------", rf.me, rf.status == Leader)
 	return rf.currentTerm, rf.status == Leader
 }
 
@@ -233,12 +232,20 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	index := 0
+	term := 0
 	isLeader := true
 
 	// Your code here (2B).
-
+	isLeader = rf.status == Leader
+	if isLeader {
+		term = rf.currentTerm
+		index = rf.getLastLogIndex() + 1
+		rf.logs = append(rf.logs, LogEntry{term, command})
+	}
 	return index, term, isLeader
 }
 
