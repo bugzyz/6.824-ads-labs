@@ -6,9 +6,6 @@ package raft
 
 //AppendEntries apply log entries from leader
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	//DPrintf("The num-%v receive a rpc heartbeatcall & send himself HB\n", rf.me)
-	DPrintf("The num-%v receive a HB-{term-%v,leaderId-%v}", rf.me, args.Term, args.LeaderId)
-
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -40,7 +37,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	//if the logs from leaders is incomplete for the current raft than return the reply to get a complete logs for current raft
 	//return the failure reply for leader so the leader will decrement nextIndex and retry
 	//add the nextIndex to optimize the retry times
-	/*	incomplete: leader is trying to append index-6 but the follower last logs index is 3
+	/*	incomplete: leader is trying to append index-6 but the follower last logs index is 2
 		index:			012345
 		leader-logs:	112223
 		follow-logs:	112
@@ -51,24 +48,30 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	//now the nextTryIndex == rf.getLastLogIndex() +1 == 5 and args.PrevLogIndex == rf.getLastLogIndex() == 4
-	//and start to detect the conflict as example below
-	//when prevLogIndex <= 0, it means the logs is empty
-	//todo: is the args.PrevLogIndex > 0 or args.PrevLogIndex >= 0
-	//the args.entries is not enough for solve the conflict
+	//now the args.prevLogIndex == rf.getLastLogIndex()+1, and the leader sending appendEntries of [] because the
 	/*
 			index			0123456
-			leader-logs:l1:	1133445
-			follow-logs:l2:	11225
-		the if-block below detect whether the l1[4].term == l2[4].term
+			leader-logs:l1:	012
+			follow-logs:l2:	011111
+		the if-block below detect whether the l1[3].term == l2[3].term
 		if equal than only needs to replicate the succeeding logEntries
 		if unequal than needs more logEntires to replicate
 	*/
 	if args.PrevLogIndex > 0 && rf.logs[args.PrevLogIndex].Term != args.PrevLogTerm {
 		//needs more logEntires to replicate
-		//term == 5
+		//in this case the X == 2
+		/*for example
+		index			0123456
+		leader-logs:l1:	1133445
+		follow-logs:l2:	1122
+		*/
+		//so the leader needs to find out the previous conflicted term\index
+		//args.PrevLogTerm ==
+		//args.PrevLogIndex == 2
+		//term == 1
 		term := rf.logs[args.PrevLogIndex].Term
 
+		//to repeatly find out the prevous term logs and tell the leaders for asking more args.entries to modified its own uncommitted log
 		for reply.NextTryIndex = args.PrevLogIndex - 1; reply.NextTryIndex > 0 && rf.logs[reply.NextTryIndex].Term == term; reply.NextTryIndex-- {
 		}
 
@@ -76,15 +79,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} else {
 		//only needs to replicate the succeeding logEntries
 
-		//debug
-		Success("rf-%v in its appendEntires func with previous logs:%v and args.entries:%v and commitIndex/lastApplied:%v/%v", rf.me, rf.logs, args.Entries, rf.commitIndex, rf.lastApplied)
-
 		//split
 		rest := rf.logs[args.PrevLogIndex+1:]
 		rf.logs = rf.logs[:args.PrevLogIndex+1]
-
-		//debug
-		Success("rf-%v in its appendEntires func with rest:%v and logs:%v", rf.me, rest, rf.logs)
 
 		if conflicted(rest, args.Entries) || len(args.Entries) > len(rest) {
 			//conflicted or follower len lesser than leader's-just overwrite the logs
@@ -95,16 +92,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rest3:			3344	0||1	result:	33445
 			*/
 			rf.logs = append(rf.logs, args.Entries...)
-			Error1("%v-raft conflicted and the rf.logs:%v, rest:%v args.entries:%v", rf.me, rf.logs, rest, args.Entries)
 		} else {
 			//no conflicted and the length of args.entries is lesser than follower's
 			//just let the follower's logs length greater than leader's since it hasn't been commited and will be overwrite after the leader's args.Enties larger than follower's logs
 			/*
 				args.entries:	33445
 				rest1:			334456	0||0	result:	334456
+				it's ok that the result is longer than the entries because the commitIndex records the real situation of the rf.logs
 			*/
 			rf.logs = append(rf.logs, rest...)
-			Error1("%v-raft NO---conflicted and the rf.logs:%v, rest:%v args.entries:%v", rf.me, rf.logs, rest, args.Entries)
 		}
 
 		//successfully append entries
@@ -129,19 +125,12 @@ func (rf *Raft) commitLogs() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	//debug
-	var ApplyMsgsArr []ApplyMsg
-	Error("Raft-%v is in its commitLogs() with lastApplied:%v commitIndex:%v\n and the logs is %v", rf.me, rf.lastApplied, rf.commitIndex, rf.logs)
-
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		//the commandValid most be true otherwise the applyCh will ignore this applyMsg
 		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i].Command}
-		//debug
-		ApplyMsgsArr = append(ApplyMsgsArr, ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i].Command})
 	}
 
 	rf.lastApplied = rf.commitIndex
-
-	Trace("Raft-%v commit new logs with commitIndex:%v and new commit applyMsgs:%v", rf.me, rf.commitIndex, ApplyMsgsArr)
 }
 
 //detect whether there is a conflict between follower's logs and leader's logs
@@ -161,7 +150,6 @@ func conflicted(flwrLogs []LogEntry, ldrLogs []LogEntry) bool {
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	//todo: update the information based on reply
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -220,10 +208,6 @@ func (rf *Raft) sendAllAppendEntries() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	//debug
-	Trace("leader's nextIndex array:%v", rf.nextIndex)
-	Trace("leader's matchIndex array:%v", rf.matchIndex)
-
 	//each raft instance should receive different args
 	for i := range rf.peers {
 		//only when the rf is still the leader, the leader raft send appendEntries request
@@ -236,7 +220,8 @@ func (rf *Raft) sendAllAppendEntries() {
 			//leader commit index
 			args.LeaderCommit = rf.commitIndex
 
-			//if the logs is empty:	prevLogIndex == -1
+			//if the logs is empty:	prevLogIndex == 0
+			//with a {0, nil} in it
 			args.PrevLogIndex = rf.nextIndex[i] - 1
 
 			//the logs isn't empty so the prevLogTerm can be found in the logs
@@ -248,8 +233,6 @@ func (rf *Raft) sendAllAppendEntries() {
 			if rf.nextIndex[i] <= rf.getLastLogIndex() {
 				args.Entries = rf.logs[rf.nextIndex[i]:]
 			}
-
-			DPrintf("---Num-%v raft Creating a appendEntries request-{term-%v,leaderId-%v,prevLogTerm-%v,prevLogIndex-%v,entries-%v}", rf.me, args.Term, args.LeaderId, args.PrevLogTerm, args.PrevLogIndex, args.Entries)
 
 			go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
 		}

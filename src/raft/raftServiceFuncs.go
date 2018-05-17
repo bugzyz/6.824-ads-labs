@@ -7,7 +7,6 @@ import (
 
 func (rf *Raft) runServer() {
 	for {
-		Trace("Num-%v with its logs-%v and commitIndex/lastApplied:%v/%v", rf.me, rf.logs, rf.commitIndex, rf.lastApplied)
 		switch rf.status {
 		case Leader:
 			Info("Raft-%v switch-leader: term-%v", rf.me, rf.currentTerm)

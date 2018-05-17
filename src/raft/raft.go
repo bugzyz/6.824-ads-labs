@@ -83,7 +83,6 @@ func (rf *Raft) GetState() (int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("---------------------------------------\nthe tester check getstate() of rf-%v , isLeader?:%v\n---------------------------------------", rf.me, rf.status == Leader)
 	return rf.currentTerm, rf.status == Leader
 }
 
@@ -239,9 +238,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := 0
 	term := 0
 	isLeader := true
-
-	//debug
-	Trace("call start() with %v", command)
 
 	// Your code here (2B).
 	isLeader = rf.status == Leader
