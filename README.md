@@ -17,12 +17,12 @@ Btw, the master branch is the original clean 6.824 code from the MIT-6.824 class
 And the dev branch is a branch maintaining the latest progress which follows the list below.  
 
 - [x] Lab 1: MapReduce
------------------------------
+
 - [ ] Lab 2: Raft Consensus Algorithm
-- [x]  Lab 2-part2A
-- [ ]  Lab 2-part2B
-- [ ]  Lab 2-part2C
------------------------------
+- [x] ----Lab 2-part2A
+- [x] ----Lab 2-part2B
+- [ ] ----Lab 2-part2C
+
 - [ ] Lab 3: Fault-tolerant Key/Value Service
------------------------------
+
 - [ ] Lab 4: Sharded Key/Value Service
