@@ -1,6 +1,10 @@
 # 6.824-ads-labs
 the 6.824 labs  
 This is my answer of 6.824  
+As a greenhand of the ads-lab, i also read the code from https://github.com/WenbinZhu/MIT-6.824-labs
+The code from Wenbinzhu is clear and easy to understand.
+I added some comments in my version so that it would be easy to understand how the implementation works.    
+
 Course website: https://pdos.csail.mit.edu/6.824/schedule.html  
 
 There are several branch in this repository. Why did i create so many branch?   
