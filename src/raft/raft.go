@@ -17,8 +17,12 @@ package raft
 //   in the same server.
 //
 
-import "sync"
-import "labrpc"
+import (
+	"bytes"
+	"labgob"
+	"labrpc"
+	"sync"
+)
 
 // import "bytes"
 // import "labgob"
@@ -100,6 +104,13 @@ func (rf *Raft) persist() {
 	// e.Encode(rf.yyy)
 	// data := w.Bytes()
 	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.logs)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
@@ -122,6 +133,20 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var tempCurTerm int
+	var tempVotedFor int
+	var tempLogs []LogEntry
+
+	if d.Decode(&tempCurTerm) != nil || d.Decode(&tempVotedFor) != nil || d.Decode(&tempLogs) != nil {
+		Error1("----THE ReadPersist Func Went Wrong!!----")
+	} else {
+		rf.currentTerm = tempCurTerm
+		rf.votedFor = tempVotedFor
+		rf.logs = tempLogs
+	}
+
 }
 
 //
@@ -154,6 +179,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// because the rf.status may change so we need lock
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	defer rf.persist()
 
 	//the requestVote rule1
 	if args.Term < rf.currentTerm {
@@ -235,6 +262,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	defer rf.persist()
+
 	index := 0
 	term := 0
 	isLeader := true
@@ -279,8 +308,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// Your initialization code here (2A, 2B, 2C).
 
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
 	rf.currentTerm = 0
 	rf.voteCount = 0
 	rf.votedFor = -1

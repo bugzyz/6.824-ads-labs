@@ -9,6 +9,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	defer rf.persist()
+
 	reply.Success = false
 
 	//old leader "sending" args
@@ -154,6 +156,8 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	defer rf.persist()
+
 	//if the rf is no longer the leader then return
 	if !ok || rf.status != Leader || args.Term != rf.currentTerm {
 		return ok
@@ -275,6 +279,9 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	defer rf.persist()
+
 	//return the failed ok
 	if !ok {
 		return ok
