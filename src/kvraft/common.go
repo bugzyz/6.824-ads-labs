@@ -15,6 +15,12 @@ type PutAppendArgs struct {
 	// You'll have to add definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+
+	//the ClientId + opNum imply a unique operation
+	//to detect which client send this args
+	ClientId int64
+	//to detect what's the num of the request send by clientid
+	OpNum int
 }
 
 type PutAppendReply struct {

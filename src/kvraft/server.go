@@ -6,6 +6,7 @@ import (
 	"log"
 	"raft"
 	"sync"
+	"time"
 )
 
 const Debug = 0
@@ -17,11 +18,18 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-
 type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	//operation type
+	Type  string
+	Key   string
+	Value string
+	//the id of which the request comes from
+	ClientId int64
+	//the num of the request which used to detect duplicate request return from different raft
+	OpNum int
 }
 
 type KVServer struct {
@@ -33,15 +41,119 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+	//storage
+	storage map[string]string
+	//the channel to send the request finished message
+	result map[int]chan Op
+	//use the clientId as the key, and the opNum as the value
+	//As the opNum of a specific clientId is monotonically increasing, it will be easy to detect the duplicate request from the same clientId
+	detectDup map[int64]int
 }
 
+func (kv *KVServer) callStart(op Op) bool {
+	index, _, isLeader := kv.rf.Start(op)
+
+	//the raft is no longer the leader -> return failed and the client will try it again
+	if isLeader == false {
+		return false
+	}
+
+	kv.mu.Lock()
+	ch, ok := kv.result[index]
+
+	//if there isn't a channel used to pass the finish message than create one
+	if !ok {
+		ch = make(chan Op, 1)
+		kv.result[index] = ch
+	}
+
+	kv.mu.Unlock()
+
+	select {
+	case cmd := <-ch:
+		return cmd == op
+	case <-time.After(800 * time.Millisecond):
+		return false
+	}
+}
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
+	//init operation
+	op := Op{Type: "GET", Key: args.Key}
+
+	ok := kv.callStart(op)
+
+	// callStart() failed the leader is changed and return the wrongleader reply
+	if !ok {
+		reply.WrongLeader = true
+		return
+	}
+
+	value, exist := kv.storage[args.Key]
+
+	if exist {
+		reply.Err = OK
+		reply.Value = value
+	} else {
+		reply.Err = ErrNoKey
+	}
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
+	op := Op{Type: args.Op, Key: args.Key, Value: args.Value, ClientId: args.ClientId, OpNum: args.OpNum}
+
+	ok := kv.callStart(op)
+
+	if !ok {
+		reply.WrongLeader = true
+		return
+	}
+
+	reply.WrongLeader = false
+	reply.Err = OK
+}
+
+//after receiving a committed operation than apply it on the kv.storage
+func (kv *KVServer) executeOpOnKvServer(op Op) {
+	switch op.Type {
+	case "PUT":
+		kv.storage[op.Key] = op.Value
+	case "Append":
+		kv.storage[op.Key] += op.Value
+	default:
+		Error("kvServer-%v executeOpOnKvServer func went wrong", kv.me)
+	}
+}
+
+//this func is a for loop that make that kv-server keeps receiving new committed op from the associated raft agreement
+//and apply the op to the storage
+func (kv *KVServer) receiveApplyMsgAndApply() {
+	for {
+		//get the op that commit by those rafts
+		msg := <-kv.applyCh
+		//convert the command interface{} to Op
+		op := msg.Command.(Op)
+
+		kv.mu.Lock()
+
+		if op.Type != "GET" {
+			//record the opNum of every clientId so that if the op.Opnum <= opNum, it means that this operation is executed before
+			if opNum, ok := kv.detectDup[op.ClientId]; !ok || op.OpNum > opNum {
+				kv.executeOpOnKvServer(op)
+				kv.detectDup[op.ClientId] = op.OpNum
+			}
+		}
+
+		ch, ok := kv.result[msg.CommandIndex]
+
+		if ok {
+			//tell the RPC handler of kvserver that the agreement is done and the op is applied on storage
+			ch <- op
+		}
+		kv.mu.Unlock()
+	}
 }
 
 //
@@ -84,6 +196,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
+	kv.storage = make(map[string]string)
+	kv.result = make(map[int]chan Op)
+	kv.detectDup = make(map[int64]int)
 
+	go kv.receiveApplyMsgAndApply()
 	return kv
 }
