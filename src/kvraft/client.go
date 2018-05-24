@@ -1,8 +1,11 @@
 package raftkv
 
-import "labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"crypto/rand"
+	"fmt"
+	"labrpc"
+	"math/big"
+)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
@@ -83,8 +86,14 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 //
+//check how many times the putAppend being called
+var count int = 0
+
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+	//debug
+	fmt.Printf("---------------count:%v---------------\n", count)
+	count++
 	paArgs := new(PutAppendArgs)
 	paArgs.Key = key
 	paArgs.Op = op
@@ -95,13 +104,17 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	ck.opNum++
 	paArgs.OpNum = ck.opNum
 
-	reply := new(PutAppendReply)
-
 	for ; ; ck.leader = (ck.leader + 1) % len(ck.servers) {
+		Trace("client putAppend start new loop")
+		reply := new(PutAppendReply)
 		ok := ck.servers[ck.leader].Call("KVServer.PutAppend", paArgs, reply)
 
+		if ok {
+			Success("server-%v got the reply:%v", ck.leader, reply)
+		}
 		if ok && !reply.WrongLeader {
 			Success("client OP:%v success", op)
+			return
 		}
 	}
 }

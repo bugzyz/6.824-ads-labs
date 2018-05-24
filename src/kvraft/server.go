@@ -57,7 +57,7 @@ func (kv *KVServer) callStart(op Op) bool {
 	if isLeader == false {
 		return false
 	}
-
+	Success("kv-%v now connect the true leader", kv.me)
 	kv.mu.Lock()
 	ch, ok := kv.result[index]
 
@@ -68,9 +68,9 @@ func (kv *KVServer) callStart(op Op) bool {
 	}
 
 	kv.mu.Unlock()
-
 	select {
 	case cmd := <-ch:
+		Trace("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
 		return cmd == op
 	case <-time.After(800 * time.Millisecond):
 		return false
@@ -108,11 +108,14 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 
 	if !ok {
 		reply.WrongLeader = true
+		Error("kvserver-%v callStart() failed! and return reply:%v", kv.me, reply)
 		return
 	}
 
 	reply.WrongLeader = false
 	reply.Err = OK
+
+	Success("kvserver-%v callStart() success! and return reply:%v", kv.me, reply)
 }
 
 //after receiving a committed operation than apply it on the kv.storage
@@ -136,12 +139,16 @@ func (kv *KVServer) receiveApplyMsgAndApply() {
 		//convert the command interface{} to Op
 		op := msg.Command.(Op)
 
+		//debug
+		Error("kv-%v receiving a msg:%v", kv.me, msg)
+
 		kv.mu.Lock()
 
 		if op.Type != "GET" {
 			//record the opNum of every clientId so that if the op.Opnum <= opNum, it means that this operation is executed before
 			if opNum, ok := kv.detectDup[op.ClientId]; !ok || op.OpNum > opNum {
 				kv.executeOpOnKvServer(op)
+				// Trace("kv-%v receiving a op.OpNum:%v > opNum:%v from clientId:%v", kv.me, op.OpNum, opNum, op.ClientId)
 				kv.detectDup[op.ClientId] = op.OpNum
 			}
 		}
@@ -151,6 +158,7 @@ func (kv *KVServer) receiveApplyMsgAndApply() {
 		if ok {
 			//tell the RPC handler of kvserver that the agreement is done and the op is applied on storage
 			ch <- op
+			// Error("kv-%v sending a op:%v to ch", kv.me, op)
 		}
 		kv.mu.Unlock()
 	}
