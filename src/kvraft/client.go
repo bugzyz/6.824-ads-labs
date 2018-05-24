@@ -2,7 +2,6 @@ package raftkv
 
 import (
 	"crypto/rand"
-	"fmt"
 	"labrpc"
 	"math/big"
 )
@@ -70,8 +69,6 @@ func (ck *Clerk) Get(key string) string {
 			} else {
 				return ""
 			}
-		} else {
-			return ""
 		}
 	}
 }
@@ -86,14 +83,9 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 //
-//check how many times the putAppend being called
-var count int = 0
 
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
-	//debug
-	fmt.Printf("---------------count:%v---------------\n", count)
-	count++
 	paArgs := new(PutAppendArgs)
 	paArgs.Key = key
 	paArgs.Op = op

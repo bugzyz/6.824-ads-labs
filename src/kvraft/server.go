@@ -89,8 +89,10 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		reply.WrongLeader = true
 		return
 	}
-
+	reply.WrongLeader = false
+	kv.mu.Lock()
 	value, exist := kv.storage[args.Key]
+	kv.mu.Unlock()
 
 	if exist {
 		reply.Err = OK
@@ -128,6 +130,7 @@ func (kv *KVServer) executeOpOnKvServer(op Op) {
 	default:
 		Error("kvServer-%v executeOpOnKvServer func went wrong", kv.me)
 	}
+	Trace1("KvServer-%v now has the storage of %v", kv.me, kv.storage)
 }
 
 //this func is a for loop that make that kv-server keeps receiving new committed op from the associated raft agreement

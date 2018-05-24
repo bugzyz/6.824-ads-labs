@@ -6,7 +6,7 @@ import (
 )
 
 //decide whether to prinbt
-const print = 1
+const print = -1
 
 const (
 	color_red = uint8(iota + 91)
@@ -88,7 +88,7 @@ func formatLog(prefix string) string {
 }
 
 //second group
-const print1 = 1
+const print1 = -1
 
 func Trace1(format string, a ...interface{}) {
 	if print1 < 0 {
