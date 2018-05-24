@@ -118,7 +118,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 //after receiving a committed operation than apply it on the kv.storage
 func (kv *KVServer) executeOpOnKvServer(op Op) {
 	switch op.Type {
-	case "PUT":
+	case "Put":
 		kv.storage[op.Key] = op.Value
 	case "Append":
 		kv.storage[op.Key] += op.Value
