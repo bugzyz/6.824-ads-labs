@@ -29,5 +29,7 @@ And the dev branch is a branch maintaining the latest progress which follows the
 - [x] ----Lab 2-part2C
 
 - [ ] Lab 3: Fault-tolerant Key/Value Service
+- [x] ----Lab 3-part3A
+- [ ] ----Lab 3-part3B
 
 - [ ] Lab 4: Sharded Key/Value Service
