@@ -1,6 +1,7 @@
 package raftkv
 
 import (
+	"bytes"
 	"labgob"
 	"labrpc"
 	"log"
@@ -48,6 +49,10 @@ type KVServer struct {
 	//use the clientId as the key, and the opNum as the value
 	//As the opNum of a specific clientId is monotonically increasing, it will be easy to detect the duplicate request from the same clientId
 	detectDup map[int64]int
+
+	//lab3B
+	//record the max index for snapshotting and as a offset to update the raft log entries after deleting the previous log entries
+	maxIndex int
 }
 
 func (kv *KVServer) callStart(op Op) bool {
@@ -163,8 +168,26 @@ func (kv *KVServer) receiveApplyMsgAndApply() {
 			ch <- op
 			// Error("kv-%v sending a op:%v to ch", kv.me, op)
 		}
+
+		//record the max index for snapshotting and as a offset to update the raft log entries after deleting the previous log entries
+		if msg.CommandIndex > kv.maxIndex {
+			kv.maxIndex = msg.CommandIndex
+		}
+
+		//lab3B
+		//if exceed the maxraftstate, do the snapshot
+		if kv.maxraftstate != -1 && kv.rf.GetRaftSize() >= kv.maxraftstate {
+			kv.snapshotServer(kv.maxIndex)
+		}
 		kv.mu.Unlock()
 	}
+}
+
+func (kv *KVServer) snapshotServer(index int) {
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(kv.storage)
+	kv.rf.DoSnapshot(index, w.Bytes())
 }
 
 //

@@ -6,7 +6,7 @@ import (
 )
 
 //decide whether to prinbt
-const print = -1
+const print = 1
 
 const (
 	color_red = uint8(iota + 91)
@@ -88,7 +88,7 @@ func formatLog(prefix string) string {
 }
 
 //second group
-const print1 = 1
+const print1 = -1
 
 func Trace1(format string, a ...interface{}) {
 	if print1 < 0 {
@@ -124,6 +124,49 @@ func Warning1(format string, a ...interface{}) {
 
 func Error1(format string, a ...interface{}) {
 	if print1 < 0 {
+		return
+	}
+	prefix := red(erro)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+//second group
+const print2 = 1
+
+func Trace2(format string, a ...interface{}) {
+	if print2 < 0 {
+		return
+	}
+	prefix := yellow(trac)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Info2(format string, a ...interface{}) {
+	if print2 < 0 {
+		return
+	}
+	prefix := blue(info)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Success2(format string, a ...interface{}) {
+	if print2 < 0 {
+		return
+	}
+	prefix := green(succ)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Warning2(format string, a ...interface{}) {
+	if print2 < 0 {
+		return
+	}
+	prefix := magenta(warn)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Error2(format string, a ...interface{}) {
+	if print2 < 0 {
 		return
 	}
 	prefix := red(erro)

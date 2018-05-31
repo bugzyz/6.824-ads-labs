@@ -216,29 +216,45 @@ func (rf *Raft) sendAllAppendEntries() {
 	for i := range rf.peers {
 		//only when the rf is still the leader, the leader raft send appendEntries request
 		if i != rf.me && rf.status == Leader {
-			//create the append args
-			args := new(AppendEntriesArgs)
-			args.Term = rf.currentTerm
-			args.LeaderId = rf.me
+			//if the nextTry index is greater than snapshotIndex than send the log entries directly
+			//else use the snapshot to help follower catch up with the leader's logs
+			if rf.snapshotIndex < rf.nextIndex[i] {
+				//create the append args
+				args := new(AppendEntriesArgs)
+				args.Term = rf.currentTerm
+				args.LeaderId = rf.me
 
-			//leader commit index
-			args.LeaderCommit = rf.commitIndex
+				//leader commit index
+				args.LeaderCommit = rf.commitIndex
 
-			//if the logs is empty:	prevLogIndex == 0
-			//with a {0, nil} in it
-			args.PrevLogIndex = rf.nextIndex[i] - 1
+				//if the logs is empty:	prevLogIndex == 0
+				//with a {0, nil} in it
+				args.PrevLogIndex = rf.nextIndex[i] - 1
 
-			//the logs isn't empty so the prevLogTerm can be found in the logs
-			if args.PrevLogIndex >= 0 {
-				args.PrevLogTerm = rf.logs[args.PrevLogIndex].Term
+				//the logs isn't empty so the prevLogTerm can be found in the logs
+				if args.PrevLogIndex >= 0 {
+					args.PrevLogTerm = rf.logs[args.PrevLogIndex].Term
+				}
+				//when the nextIndex of follower logs is lesser than leader.nextIndex, it means that the follower's log is incomplete
+				//when nextIndex greater than lastLogIndex, it means the follower's logs is up to date and the entries is a empty slice
+				if rf.nextIndex[i] <= rf.getLastLogIndex() {
+					args.Entries = rf.logs[rf.nextIndex[i]:]
+				}
+
+				go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
+			} else {
+				//create snapshot args
+				args := new(InstallSsArgs)
+				args.LeaderId = rf.me
+				args.Term = rf.currentTerm
+				args.Data = rf.snapshotData
+				args.LastIncludedIndex = rf.snapshotIndex
+				args.LastIncludedTerm = rf.snapshotTerm
+
+				reply := new(InstallSsReply)
+
+				go rf.sendInstallSnapshotRequest(i, args, reply)
 			}
-			//when the nextIndex of follower logs is lesser than leader.nextIndex, it means that the follower's log is incomplete
-			//when nextIndex greater than lastLogIndex, it means the follower's logs is up to date and the entries is a empty slice
-			if rf.nextIndex[i] <= rf.getLastLogIndex() {
-				args.Entries = rf.logs[rf.nextIndex[i]:]
-			}
-
-			go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
 		}
 	}
 }
@@ -317,6 +333,91 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 	return ok
 }
 
+//-----------------------snapshot request rpc sta----------------------
+
+//todo: the RPC callee of follower raft to install the snapshot from leader
+func (rf *Raft) InstallSnapshot(args *InstallSsArgs, reply *InstallSsReply) {
+	//update the status
+
+	//fill the reply to tell leader to update its follower status record
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	defer rf.persist()
+
+	//old leader "sending" args
+	//raft with recognization of the new leader "receive" this args
+	//the old leader(failure or delay so there is a another true leader now)
+	//the old leader send the request args with lesser than follower's currentTerm
+	//just return the upToDate term to the fake old leader
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		return
+	}
+
+	//new leader first time "sending" heartbeat to follower/candidate who is normal or wake up from a failure/delay
+	//now the rf is a follower or candidator
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.status = Follower
+		rf.votedFor = -1
+	}
+
+	//using the heartbeat channel to pass the heartbeat message to raft runServer() goroutine
+	rf.heartbeat <- true
+	reply.Term = rf.currentTerm
+
+	if rf.snapshotIndex < args.LastIncludedIndex {
+		rf.snapshotData = args.Data
+		rf.snapshotIndex = args.LastIncludedIndex
+		rf.snapshotTerm = args.LastIncludedTerm
+		rf.logs = rf.logs[len(rf.logs)+rf.snapshotIndex-args.LastIncludedIndex:]
+		Trace2("Now the callee installSnapshot on rf-%v cut logs from %v to end", rf.me, len(rf.logs)+rf.snapshotIndex-args.LastIncludedIndex)
+		rf.commitIndex = rf.snapshotIndex
+
+		appMsg := ApplyMsg{CommandValid: true, CommandIndex: args.LastIncludedIndex, UseSnapshot: true, Snapshot: args.Data}
+		//send the success msg to applyCh
+		rf.applyCh <- appMsg
+	}
+}
+
+//send the RPC to a single follower
+func (rf *Raft) sendInstallSnapshotRequest(serverNum int, args *InstallSsArgs, reply *InstallSsReply) bool {
+	ok := rf.peers[serverNum].Call("Raft.InstallSnapshot", args, reply)
+
+	//didn't get the reply from follower
+	if !ok {
+		return false
+	}
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.status != Leader || args.Term != rf.currentTerm {
+		return ok
+	}
+
+	if reply.Term > rf.currentTerm {
+		rf.status = Follower
+		rf.currentTerm = reply.Term - 1
+		rf.votedFor = -1
+		return ok
+	}
+
+	//update the follower status records just as the appendEntries() does
+	if reply.Term == rf.currentTerm && rf.matchIndex[serverNum] < args.LastIncludedIndex {
+		//if success it means the follower has the same snapshot as the leader
+		//match index array update
+		rf.matchIndex[serverNum] = args.LastIncludedIndex
+		//next index array update
+		rf.nextIndex[serverNum] = rf.matchIndex[serverNum] + 1
+	}
+
+	return ok
+}
+
+//-----------------------util sta----------------------
 //get last log's term
 func (rf *Raft) getLastLogTerm() int {
 	return rf.logs[rf.getLastLogIndex()].Term

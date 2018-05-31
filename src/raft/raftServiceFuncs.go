@@ -78,3 +78,21 @@ func (rf *Raft) candidatesLogIsUp2Date(argsTerm int, argsIndex int) bool {
 	return argsIndex >= rfLastIndex
 
 }
+
+func (rf *Raft) DoSnapshot(index int, ssData []byte) {
+	rf.mu.Lock()
+
+	//todo: some if block to avoid the incorrect status of raft
+
+	//delete the previous snapshotted data
+	rf.logs = rf.logs[index-rf.snapshotIndex:]
+	//update the index being snapshotted
+	rf.snapshotIndex = index
+	rf.snapshotTerm = rf.logs[0].Term
+	rf.snapshotData = ssData
+
+	//debug
+	Trace2("Now is in the doSnapshot() and updating the rf-%v snapshot relatively info:\nsnapshotIndex:%v\tsnapshotTerm:%v\nsnapshotData:%v\nrf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.snapshotData, rf.logs)
+
+	rf.mu.Unlock()
+}
