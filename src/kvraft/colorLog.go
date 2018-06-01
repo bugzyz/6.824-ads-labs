@@ -15,11 +15,11 @@ const (
 	color_blue
 	color_magenta //洋红
 
-	info = "[INFO]"
-	trac = "[TRAC]"
-	erro = "[ERRO]"
-	warn = "[WARN]"
-	succ = "[SUCC]"
+	info = "[INFO-kvserver]"
+	trac = "[TRAC-kvserver]"
+	erro = "[ERRO-kvserver]"
+	warn = "[WARN-kvserver]"
+	succ = "[SUCC-kvserver]"
 )
 
 // see complete color rules in document in https://en.wikipedia.org/wiki/ANSI_escape_code#cite_note-ecma48-13
@@ -88,7 +88,7 @@ func formatLog(prefix string) string {
 }
 
 //second group
-const print1 = -1
+const print1 = 1
 
 func Trace1(format string, a ...interface{}) {
 	if print1 < 0 {
