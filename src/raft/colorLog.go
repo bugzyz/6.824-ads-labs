@@ -15,11 +15,11 @@ const (
 	color_blue
 	color_magenta //洋红
 
-	info = "[INFO]"
-	trac = "[TRAC]"
-	erro = "[ERRO]"
-	warn = "[WARN]"
-	succ = "[SUCC]"
+	info = "[INFO-raft]"
+	trac = "[TRAC-raft]"
+	erro = "[ERRO-raft]"
+	warn = "[WARN-raft]"
+	succ = "[SUCC-raft]"
 )
 
 // see complete color rules in document in https://en.wikipedia.org/wiki/ANSI_escape_code#cite_note-ecma48-13
