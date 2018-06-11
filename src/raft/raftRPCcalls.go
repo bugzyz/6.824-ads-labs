@@ -219,6 +219,7 @@ func (rf *Raft) sendAllAppendEntries() {
 			//if the nextTry index is greater than snapshotIndex than send the log entries directly
 			//else use the snapshot to help follower catch up with the leader's logs
 			if rf.snapshotIndex < rf.nextIndex[i] {
+				Info2("leader-%v detect--- a raft-%v without low nextIndex now passing the snapshot", rf.me, i)
 				//create the append args
 				args := new(AppendEntriesArgs)
 				args.Term = rf.currentTerm
@@ -243,7 +244,7 @@ func (rf *Raft) sendAllAppendEntries() {
 
 				go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
 			} else {
-				Info2("leader-%v detect a raft with low nextIndex now passing the snapshot", rf.me)
+				Info2("leader-%v detect a raft-%v with low nextIndex now passing the snapshot", rf.me, i)
 				//create snapshot args
 				args := new(InstallSsArgs)
 				args.LeaderId = rf.me
@@ -253,7 +254,7 @@ func (rf *Raft) sendAllAppendEntries() {
 				args.LastIncludedTerm = rf.snapshotTerm
 
 				reply := new(InstallSsReply)
-
+				reply.Term = -1
 				go rf.sendInstallSnapshotRequest(i, args, reply)
 			}
 		}
@@ -395,7 +396,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSsArgs, reply *InstallSsReply) {
 //send the RPC to a single follower
 func (rf *Raft) sendInstallSnapshotRequest(serverNum int, args *InstallSsArgs, reply *InstallSsReply) bool {
 	ok := rf.peers[serverNum].Call("Raft.InstallSnapshot", args, reply)
-	Error2("leader receive a reply of installSnapshot rpc from server-%v which is %v", serverNum, reply)
+	Error2("leader receive a reply of installSnapshot rpc from server-%v which is %v and return %v", serverNum, reply, ok)
 	//didn't get the reply from follower
 	if !ok {
 		return false
@@ -417,12 +418,12 @@ func (rf *Raft) sendInstallSnapshotRequest(serverNum int, args *InstallSsArgs, r
 
 	//update the follower status records just as the appendEntries() does
 	if reply.Term <= rf.currentTerm {
-		Success2("serverNum-%v's matchIndex and nextIndex has updated", rf.me)
 		//if success it means the follower has the same snapshot as the leader
 		//match index array update
 		rf.matchIndex[serverNum] = rf.snapshotIndex
 		//next index array update
 		rf.nextIndex[serverNum] = rf.snapshotIndex + 1
+		Success2("serverNum-%v's matchIndex:%v and nextIndex:%v has updated", rf.me, rf.matchIndex[serverNum], rf.nextIndex[serverNum])
 	}
 
 	return ok
