@@ -248,7 +248,7 @@ func (rf *Raft) sendAllAppendEntries() {
 				args := new(InstallSsArgs)
 				args.LeaderId = rf.me
 				args.Term = rf.currentTerm
-				args.Data = rf.snapshotData
+				args.Data = rf.persister.ReadSnapshot()
 				args.LastIncludedIndex = rf.snapshotIndex
 				args.LastIncludedTerm = rf.snapshotTerm
 
@@ -340,59 +340,56 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 func (rf *Raft) InstallSnapshot(args *InstallSsArgs, reply *InstallSsReply) {
 	Success2("rf-%v receive a InstallSnapshot RPC with args:%v and its currentTerm:%v", rf.me, args, rf.currentTerm)
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	defer rf.persist()
 
+	//reply the most up2date Term number to cause a new leader election
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
-		rf.mu.Unlock()
 		return
 	}
 
-	rf.currentTerm = args.Term
-	rf.status = Follower
-	rf.votedFor = -1
+	//successfully update the current follower's state
+	if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.status = Follower
+		rf.votedFor = -1
+	}
+
 	rf.heartbeat <- true
+	reply.Term = rf.currentTerm
 
+	//the followers has a complete snapshot data
 	if args.LastIncludedIndex <= rf.snapshotIndex {
-		reply.Term = rf.currentTerm
-		rf.persist()
-		rf.mu.Unlock()
 		return
 	}
 
-	var log LogEntry
-	// log.Index = args.LastIncludedIndex
-	log.Term = args.LastIncludedTerm
-	log.Command = 0
-	var newLog []LogEntry
-	newLog = nil
-	newLog = append(newLog, log)
+	//the args' snapshot data = rf.logs + rf.snapshot + newlogs(maybe)
+	if args.LastIncludedIndex >= rf.snapshotIndex+len(rf.logs)-1 {
+		Success2("server-%v is copying the up2date snapshot now", rf.me)
+		rf.snapshotIndex = args.LastIncludedIndex
+		rf.snapshotTerm = args.LastIncludedTerm
+		rf.commitIndex = rf.snapshotIndex
+		rf.lastApplied = rf.snapshotIndex
 
-	if args.LastIncludedIndex > rf.snapshotIndex && args.LastIncludedIndex-rf.snapshotIndex < len(rf.logs) && rf.logs[args.LastIncludedIndex-rf.snapshotIndex].Term == args.LastIncludedTerm {
-		i := args.LastIncludedIndex + 1 - rf.snapshotIndex
-		for i < len(rf.logs) {
-			newLog = append(newLog, rf.logs[i])
-			i++
-		}
+		//insert a basic log entry
+		rf.logs = []LogEntry{{rf.snapshotTerm, nil}}
+		rf.applyCh <- ApplyMsg{CommandIndex: rf.snapshotIndex, CommandValid: true, Command: nil, UseSnapshot: true, Snapshot: args.Data}
+		return
+	} else {
+		//the rf.logs + rf.snapshot = args' snapshot data + newLogs
+		Success2("server-%v is copying the up2date snapshot now", rf.me)
+
+		//cut down the log entries being snapshotted
+		rf.logs = rf.logs[args.LastIncludedIndex-rf.snapshotIndex:]
+		rf.snapshotIndex = args.LastIncludedIndex
+		rf.snapshotTerm = args.LastIncludedTerm
+		rf.commitIndex = rf.snapshotIndex
+		rf.lastApplied = rf.snapshotIndex
+
+		rf.applyCh <- ApplyMsg{CommandIndex: rf.snapshotIndex, CommandValid: true, Command: nil, UseSnapshot: true, Snapshot: args.Data}
+		return
 	}
-
-	rf.logs = newLog
-
-	rf.snapshotIndex = args.LastIncludedIndex
-	rf.snapshotTerm = args.LastIncludedTerm
-	rf.snapshotData = args.Data
-	rf.commitIndex = rf.snapshotIndex
-
-	// rf.persistBoth()
-
-	var applyMsg ApplyMsg
-	applyMsg.CommandValid = false
-	applyMsg.UseSnapshot = true
-	applyMsg.Snapshot = rf.snapshotData
-	applyMsg.CommandIndex = args.LastIncludedIndex
-	rf.applyCh <- applyMsg
-
-	reply.Term = rf.currentTerm
-	rf.mu.Unlock()
 }
 
 //send the RPC to a single follower
@@ -419,12 +416,13 @@ func (rf *Raft) sendInstallSnapshotRequest(serverNum int, args *InstallSsArgs, r
 	}
 
 	//update the follower status records just as the appendEntries() does
-	if reply.Term == rf.currentTerm && rf.matchIndex[serverNum] < args.LastIncludedIndex {
+	if reply.Term <= rf.currentTerm {
+		Success2("serverNum-%v's matchIndex and nextIndex has updated", rf.me)
 		//if success it means the follower has the same snapshot as the leader
 		//match index array update
-		rf.matchIndex[serverNum] = args.LastIncludedIndex
+		rf.matchIndex[serverNum] = rf.snapshotIndex
 		//next index array update
-		rf.nextIndex[serverNum] = rf.matchIndex[serverNum] + 1
+		rf.nextIndex[serverNum] = rf.snapshotIndex + 1
 	}
 
 	return ok

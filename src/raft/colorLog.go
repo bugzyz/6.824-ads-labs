@@ -131,7 +131,7 @@ func Error1(format string, a ...interface{}) {
 }
 
 //second group
-const print2 = -1
+const print2 = 1
 
 func Trace2(format string, a ...interface{}) {
 	if print2 < 0 {

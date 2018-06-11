@@ -52,7 +52,10 @@ type KVServer struct {
 
 	//lab3B
 	//record the max index for snapshotting and as a offset to update the raft log entries after deleting the previous log entries
-	maxIndex int
+	maxIndex      int
+	snapshotIndex int
+
+	snapshotData []byte
 }
 
 func (kv *KVServer) callStart(op Op) bool {
@@ -203,7 +206,8 @@ func (kv *KVServer) readSnapshot(data []byte) {
 	d := labgob.NewDecoder(r)
 	newStorage := make(map[string]string)
 	newDetectDup := make(map[int64]int)
-	if d.Decode(&newStorage) == nil && d.Decode(&newDetectDup) == nil {
+
+	if d.Decode(&newStorage) == nil && d.Decode(&newDetectDup) == nil && d.Decode(&kv.snapshotIndex) == nil {
 		kv.storage = newStorage
 		kv.detectDup = newDetectDup
 		Info1("kv-%v successfully read a snapshot", kv.me)
@@ -214,8 +218,15 @@ func (kv *KVServer) readSnapshot(data []byte) {
 func (kv *KVServer) snapshotServer(index int) {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
+
+	//update the snapshot index in kvserver
+	kv.snapshotIndex = index
+
 	e.Encode(kv.storage)
+	e.Encode(kv.snapshotIndex)
 	e.Encode(kv.detectDup)
+
+	//pass the snapshot data to raft and the snapshotIndex
 	kv.rf.DoSnapshot(index, w.Bytes())
 	Info1("kv-%v create a snapshot a pass it to raft", kv.me)
 

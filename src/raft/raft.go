@@ -86,7 +86,6 @@ type Raft struct {
 	//lab3B
 	snapshotIndex int
 	snapshotTerm  int
-	snapshotData  []byte
 }
 
 // return currentTerm and whether this server
