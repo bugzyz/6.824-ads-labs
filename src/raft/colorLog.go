@@ -6,7 +6,7 @@ import (
 )
 
 //decide whether to prinbt
-const print = 1
+const print = -1
 
 const (
 	color_red = uint8(iota + 91)
@@ -131,7 +131,7 @@ func Error1(format string, a ...interface{}) {
 }
 
 //second group
-const print2 = 1
+const print2 = -1
 
 func Trace2(format string, a ...interface{}) {
 	if print2 < 0 {

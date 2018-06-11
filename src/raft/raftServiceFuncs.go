@@ -92,7 +92,7 @@ func (rf *Raft) DoSnapshot(index int, ssData []byte) {
 	rf.snapshotData = ssData
 
 	//debug
-	Trace2("Now is in the doSnapshot() and updating the rf-%v snapshot relatively info:\nsnapshotIndex:%v\tsnapshotTerm:%v\nsnapshotData:%v\nrf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.snapshotData, rf.logs)
+	Trace2("raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n snapshotData:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.snapshotData, rf.logs)
 
 	rf.mu.Unlock()
 }

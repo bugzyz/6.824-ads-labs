@@ -229,7 +229,7 @@ func (rf *Raft) sendAllAppendEntries() {
 
 				//if the logs is empty:	prevLogIndex == 0
 				//with a {0, nil} in it
-				args.PrevLogIndex = rf.nextIndex[i] - 1
+				args.PrevLogIndex = rf.nextIndex[i] - 1 - rf.snapshotIndex
 
 				//the logs isn't empty so the prevLogTerm can be found in the logs
 				if args.PrevLogIndex >= 0 {
@@ -243,6 +243,7 @@ func (rf *Raft) sendAllAppendEntries() {
 
 				go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
 			} else {
+				Info2("leader-%v detect a raft with low nextIndex now passing the snapshot", rf.me)
 				//create snapshot args
 				args := new(InstallSsArgs)
 				args.LeaderId = rf.me
@@ -337,55 +338,67 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 
 //todo: the RPC callee of follower raft to install the snapshot from leader
 func (rf *Raft) InstallSnapshot(args *InstallSsArgs, reply *InstallSsReply) {
-	//update the status
-
-	//fill the reply to tell leader to update its follower status record
-
+	Success2("rf-%v receive a InstallSnapshot RPC with args:%v and its currentTerm:%v", rf.me, args, rf.currentTerm)
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
-	defer rf.persist()
-
-	//old leader "sending" args
-	//raft with recognization of the new leader "receive" this args
-	//the old leader(failure or delay so there is a another true leader now)
-	//the old leader send the request args with lesser than follower's currentTerm
-	//just return the upToDate term to the fake old leader
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
+		rf.mu.Unlock()
 		return
 	}
 
-	//new leader first time "sending" heartbeat to follower/candidate who is normal or wake up from a failure/delay
-	//now the rf is a follower or candidator
-	if args.Term > rf.currentTerm {
-		rf.currentTerm = args.Term
-		rf.status = Follower
-		rf.votedFor = -1
-	}
-
-	//using the heartbeat channel to pass the heartbeat message to raft runServer() goroutine
+	rf.currentTerm = args.Term
+	rf.status = Follower
+	rf.votedFor = -1
 	rf.heartbeat <- true
-	reply.Term = rf.currentTerm
 
-	if rf.snapshotIndex < args.LastIncludedIndex {
-		rf.snapshotData = args.Data
-		rf.snapshotIndex = args.LastIncludedIndex
-		rf.snapshotTerm = args.LastIncludedTerm
-		rf.logs = rf.logs[len(rf.logs)+rf.snapshotIndex-args.LastIncludedIndex:]
-		Trace2("Now the callee installSnapshot on rf-%v cut logs from %v to end", rf.me, len(rf.logs)+rf.snapshotIndex-args.LastIncludedIndex)
-		rf.commitIndex = rf.snapshotIndex
-
-		appMsg := ApplyMsg{CommandValid: true, CommandIndex: args.LastIncludedIndex, UseSnapshot: true, Snapshot: args.Data}
-		//send the success msg to applyCh
-		rf.applyCh <- appMsg
+	if args.LastIncludedIndex <= rf.snapshotIndex {
+		reply.Term = rf.currentTerm
+		rf.persist()
+		rf.mu.Unlock()
+		return
 	}
+
+	var log LogEntry
+	// log.Index = args.LastIncludedIndex
+	log.Term = args.LastIncludedTerm
+	log.Command = 0
+	var newLog []LogEntry
+	newLog = nil
+	newLog = append(newLog, log)
+
+	if args.LastIncludedIndex > rf.snapshotIndex && args.LastIncludedIndex-rf.snapshotIndex < len(rf.logs) && rf.logs[args.LastIncludedIndex-rf.snapshotIndex].Term == args.LastIncludedTerm {
+		i := args.LastIncludedIndex + 1 - rf.snapshotIndex
+		for i < len(rf.logs) {
+			newLog = append(newLog, rf.logs[i])
+			i++
+		}
+	}
+
+	rf.logs = newLog
+
+	rf.snapshotIndex = args.LastIncludedIndex
+	rf.snapshotTerm = args.LastIncludedTerm
+	rf.snapshotData = args.Data
+	rf.commitIndex = rf.snapshotIndex
+
+	// rf.persistBoth()
+
+	var applyMsg ApplyMsg
+	applyMsg.CommandValid = false
+	applyMsg.UseSnapshot = true
+	applyMsg.Snapshot = rf.snapshotData
+	applyMsg.CommandIndex = args.LastIncludedIndex
+	rf.applyCh <- applyMsg
+
+	reply.Term = rf.currentTerm
+	rf.mu.Unlock()
 }
 
 //send the RPC to a single follower
 func (rf *Raft) sendInstallSnapshotRequest(serverNum int, args *InstallSsArgs, reply *InstallSsReply) bool {
 	ok := rf.peers[serverNum].Call("Raft.InstallSnapshot", args, reply)
-
+	Error2("leader receive a reply of installSnapshot rpc from server-%v which is %v", serverNum, reply)
 	//didn't get the reply from follower
 	if !ok {
 		return false
