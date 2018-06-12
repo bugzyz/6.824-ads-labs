@@ -83,7 +83,7 @@ func (rf *Raft) DoSnapshot(index int, ssData []byte) {
 	rf.mu.Lock()
 	//debug
 	Trace2("starting raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.logs)
-	//todo: some if block to avoid the incorrect status of raft
+	//some if block to avoid the incorrect status of raft
 
 	//delete the previous snapshotted data
 	rf.logs = rf.logs[index-rf.snapshotIndex:]

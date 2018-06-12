@@ -206,11 +206,26 @@ func (kv *KVServer) readSnapshot(data []byte) {
 	d := labgob.NewDecoder(r)
 	newStorage := make(map[string]string)
 	newDetectDup := make(map[int64]int)
+	var newSnapshotIndex int
+	Trace2("kv-%v now initiating and reading a snapshot", kv.me)
 
-	if d.Decode(&newStorage) == nil && d.Decode(&newDetectDup) == nil && d.Decode(&kv.snapshotIndex) == nil {
+	// if d.Decode(&newStorage) == nil && d.Decode(&newDetectDup) == nil && d.Decode(&kv.snapshotIndex) == nil {
+	// 	kv.storage = newStorage
+	// 	kv.detectDup = newDetectDup
+	// 	Info2("kv-%v successfully read a snapshot", kv.me)
+	// }
+	ok1 := d.Decode(&newStorage) != nil
+	ok2 := d.Decode(&newDetectDup) != nil
+	ok3 := d.Decode(&newSnapshotIndex) != nil
+	ok := ok1 || ok2 || ok3
+	if ok {
+		Error2("----THE ReadPersist Func Went Wrong!!----store:%v, detect:%v, ssIndex:%v", ok1, ok2, ok3)
+
+	} else {
 		kv.storage = newStorage
 		kv.detectDup = newDetectDup
-		Info1("kv-%v successfully read a snapshot", kv.me)
+		kv.snapshotIndex = newSnapshotIndex
+		Info2("----THE ReadPersist Func Went GREAT!!----")
 	}
 }
 
@@ -223,12 +238,12 @@ func (kv *KVServer) snapshotServer(index int) {
 	//kv.snapshotIndex = index
 
 	e.Encode(kv.storage)
-	e.Encode(kv.snapshotIndex)
 	e.Encode(kv.detectDup)
+	e.Encode(kv.snapshotIndex)
 
 	//pass the snapshot data to raft and the snapshotIndex
 	kv.rf.DoSnapshot(index, w.Bytes())
-	Info1("kv-%v create a snapshot a pass it to raft", kv.me)
+	Info2("kv-%v create a snapshot a pass it to raft", kv.me)
 
 }
 
@@ -275,6 +290,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.storage = make(map[string]string)
 	kv.result = make(map[int]chan Op)
 	kv.detectDup = make(map[int64]int)
+
+	//todo: i should recover the state of rf first
+	kv.readSnapshot(persister.ReadSnapshot())
+	Info2("a new kvServer reading snapshot from persister:%v", persister.ReadSnapshot())
 
 	go kv.receiveApplyMsgAndApply()
 	return kv

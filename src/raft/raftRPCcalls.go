@@ -342,7 +342,7 @@ func (rf *Raft) sendRequestVoteAndDetectElectionWin(serverNum int, args *Request
 
 //-----------------------snapshot request rpc sta----------------------
 
-//todo: the RPC callee of follower raft to install the snapshot from leader
+//the RPC callee of follower raft to install the snapshot from leader
 func (rf *Raft) InstallSnapshot(args *InstallSsArgs, reply *InstallSsReply) {
 	Success2("rf-%v receive a InstallSnapshot RPC with args:%v and its currentTerm:%v", rf.me, args, rf.currentTerm)
 	rf.mu.Lock()
