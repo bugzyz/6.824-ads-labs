@@ -20,7 +20,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	//just return the upToDate term to the fake old leader
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
-		reply.NextTryIndex = rf.getLastLogIndex() + 1
+		reply.NextTryIndex = rf.getLastLogIndex() + 1 + rf.snapshotIndex
 		return
 	}
 
@@ -46,7 +46,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	*/
 	//set the prevLogIndex to the nextIndex of rf.logs
 	if args.PrevLogIndex > rf.getLastLogIndex() {
-		reply.NextTryIndex = rf.getLastLogIndex() + 1
+		reply.NextTryIndex = rf.getLastLogIndex() + 1 + rf.snapshotIndex
 		return
 	}
 
@@ -59,7 +59,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if equal than only needs to replicate the succeeding logEntries
 		if unequal than needs more logEntires to replicate
 	*/
-	if args.PrevLogIndex > 0 && rf.logs[args.PrevLogIndex].Term != args.PrevLogTerm {
+	if args.PrevLogIndex > 0 && rf.logs[args.PrevLogIndex-rf.snapshotIndex].Term != args.PrevLogTerm {
 		//needs more logEntires to replicate
 		//in this case the X == 2
 		/*for example
@@ -74,7 +74,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		term := rf.logs[args.PrevLogIndex].Term
 
 		//to repeatly find out the prevous term logs and tell the leaders for asking more args.entries to modified its own uncommitted log
-		for reply.NextTryIndex = args.PrevLogIndex - 1; reply.NextTryIndex > 0 && rf.logs[reply.NextTryIndex].Term == term; reply.NextTryIndex-- {
+		for reply.NextTryIndex = args.PrevLogIndex - 1; reply.NextTryIndex-rf.snapshotIndex > 0 && rf.logs[reply.NextTryIndex-rf.snapshotIndex].Term == term; reply.NextTryIndex-- {
 		}
 
 		reply.NextTryIndex++
@@ -82,8 +82,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		//only needs to replicate the succeeding logEntries
 
 		//split
-		rest := rf.logs[args.PrevLogIndex+1:]
-		rf.logs = rf.logs[:args.PrevLogIndex+1]
+		rest := rf.logs[args.PrevLogIndex+1-rf.snapshotIndex:]
+		rf.logs = rf.logs[:args.PrevLogIndex+1-rf.snapshotIndex]
 
 		if conflicted(rest, args.Entries) || len(args.Entries) > len(rest) {
 			//conflicted or follower len lesser than leader's-just overwrite the logs
@@ -129,7 +129,7 @@ func (rf *Raft) commitLogs() {
 
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 		//the commandValid most be true otherwise the applyCh will ignore this applyMsg
-		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i].Command}
+		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i-rf.snapshotIndex].Command}
 	}
 
 	rf.lastApplied = rf.commitIndex
@@ -187,7 +187,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		//conf-solved: the WBZ use the voteCount = 1, while the leader won't update the matchIndex and prevlogIndex of itself, so the >= N should miss the leader voteCount itself
 		voteCount := 1
 		//the leader only commit the log entries create by its currentTerm
-		if rf.logs[N].Term == rf.currentTerm {
+		if rf.logs[N-rf.snapshotIndex].Term == rf.currentTerm {
 			for i := range rf.peers {
 				//if the matchIndex has a greater match index then it means log enries is in the follower's
 				if rf.matchIndex[i] >= N {
@@ -230,16 +230,19 @@ func (rf *Raft) sendAllAppendEntries() {
 
 				//if the logs is empty:	prevLogIndex == 0
 				//with a {0, nil} in it
-				args.PrevLogIndex = rf.nextIndex[i] - 1 - rf.snapshotIndex
+				args.PrevLogIndex = rf.nextIndex[i] - 1
 
 				//the logs isn't empty so the prevLogTerm can be found in the logs
-				if args.PrevLogIndex >= 0 {
-					args.PrevLogTerm = rf.logs[args.PrevLogIndex].Term
+				if args.PrevLogIndex > 0 {
+					// if args.PrevLogIndex-rf.snapshotIndex >= len(rf.logs) {
+					Error3("out of index occurs: prevlogIndex:%v snapshotIndex:%v, len:%v", args.PrevLogIndex, rf.snapshotIndex, len(rf.logs))
+					// }
+					args.PrevLogTerm = rf.logs[args.PrevLogIndex-rf.snapshotIndex].Term
 				}
 				//when the nextIndex of follower logs is lesser than leader.nextIndex, it means that the follower's log is incomplete
 				//when nextIndex greater than lastLogIndex, it means the follower's logs is up to date and the entries is a empty slice
 				if rf.nextIndex[i] <= rf.getLastLogIndex() {
-					args.Entries = rf.logs[rf.nextIndex[i]:]
+					args.Entries = rf.logs[rf.nextIndex[i]-rf.snapshotIndex:]
 				}
 
 				go rf.sendAppendEntries(i, args, &AppendEntriesReply{})
@@ -432,10 +435,10 @@ func (rf *Raft) sendInstallSnapshotRequest(serverNum int, args *InstallSsArgs, r
 //-----------------------util sta----------------------
 //get last log's term
 func (rf *Raft) getLastLogTerm() int {
-	return rf.logs[rf.getLastLogIndex()].Term
+	return rf.logs[rf.getLastLogIndex()-rf.snapshotIndex].Term
 }
 
 //return the last log index
 func (rf *Raft) getLastLogIndex() int {
-	return len(rf.logs) - 1
+	return len(rf.logs) - 1 + rf.snapshotIndex
 }
