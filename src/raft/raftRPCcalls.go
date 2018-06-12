@@ -46,7 +46,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	*/
 	//set the prevLogIndex to the nextIndex of rf.logs
 	if args.PrevLogIndex > rf.getLastLogIndex() {
-		reply.NextTryIndex = rf.getLastLogIndex() + 1 + rf.snapshotIndex
+		reply.NextTryIndex = rf.getLastLogIndex() + 1
 		return
 	}
 
@@ -179,6 +179,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		rf.nextIndex[server] = rf.matchIndex[server] + 1
 	} else {
 		//if false it means it should update the nextIndex by the return nextTryIndex to send the correct log entries in next heartbeat sending
+		Error3("updating a nextIndex of rf-%v with nextTryIndex:%v", server, reply.NextTryIndex)
 		rf.nextIndex[server] = reply.NextTryIndex
 	}
 
@@ -236,6 +237,7 @@ func (rf *Raft) sendAllAppendEntries() {
 				if args.PrevLogIndex > 0 {
 					// if args.PrevLogIndex-rf.snapshotIndex >= len(rf.logs) {
 					Error3("out of index occurs: prevlogIndex:%v snapshotIndex:%v, len:%v", args.PrevLogIndex, rf.snapshotIndex, len(rf.logs))
+					Info3("leader status: matchIdex:%v nextIndex:%v", rf.matchIndex, rf.nextIndex)
 					// }
 					args.PrevLogTerm = rf.logs[args.PrevLogIndex-rf.snapshotIndex].Term
 				}

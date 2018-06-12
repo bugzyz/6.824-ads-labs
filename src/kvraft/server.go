@@ -220,7 +220,7 @@ func (kv *KVServer) snapshotServer(index int) {
 	e := labgob.NewEncoder(w)
 
 	//update the snapshot index in kvserver
-	kv.snapshotIndex = index
+	//kv.snapshotIndex = index
 
 	e.Encode(kv.storage)
 	e.Encode(kv.snapshotIndex)

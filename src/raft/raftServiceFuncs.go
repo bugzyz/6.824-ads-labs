@@ -81,7 +81,8 @@ func (rf *Raft) candidatesLogIsUp2Date(argsTerm int, argsIndex int) bool {
 
 func (rf *Raft) DoSnapshot(index int, ssData []byte) {
 	rf.mu.Lock()
-
+	//debug
+	Trace2("starting raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.logs)
 	//todo: some if block to avoid the incorrect status of raft
 
 	//delete the previous snapshotted data
@@ -97,6 +98,6 @@ func (rf *Raft) DoSnapshot(index int, ssData []byte) {
 	rf.persister.SaveStateAndSnapshot(rf.persister.ReadRaftState(), ssData)
 
 	//debug
-	Trace2("raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.logs)
+	Trace2("finished raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.logs)
 	rf.mu.Unlock()
 }
