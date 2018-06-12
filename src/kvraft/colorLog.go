@@ -8,6 +8,9 @@ import (
 //decide whether to prinbt
 const print = -1
 
+//second group
+const print1 = -1
+
 const (
 	color_red = uint8(iota + 91)
 	color_green
@@ -86,9 +89,6 @@ func magenta(s string) string {
 func formatLog(prefix string) string {
 	return time.Now().Format("2006/01/02 15:04:05") + " " + prefix + " "
 }
-
-//second group
-const print1 = 1
 
 func Trace1(format string, a ...interface{}) {
 	if print1 < 0 {

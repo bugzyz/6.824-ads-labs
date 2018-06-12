@@ -8,6 +8,15 @@ import (
 //decide whether to prinbt
 const print = -1
 
+//second group
+const print1 = -1
+
+//third group
+const print2 = -1
+
+//fourth group
+const print3 = -1
+
 const (
 	color_red = uint8(iota + 91)
 	color_green
@@ -87,9 +96,6 @@ func formatLog(prefix string) string {
 	return time.Now().Format("2006/01/02 15:04:05") + " " + prefix + " "
 }
 
-//second group
-const print1 = -1
-
 func Trace1(format string, a ...interface{}) {
 	if print1 < 0 {
 		return
@@ -130,9 +136,6 @@ func Error1(format string, a ...interface{}) {
 	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
 }
 
-//second group
-const print2 = 1
-
 func Trace2(format string, a ...interface{}) {
 	if print2 < 0 {
 		return
@@ -167,6 +170,46 @@ func Warning2(format string, a ...interface{}) {
 
 func Error2(format string, a ...interface{}) {
 	if print2 < 0 {
+		return
+	}
+	prefix := red(erro)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Trace3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := yellow(trac)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Info3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := blue(info)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Success3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := green(succ)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Warning3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := magenta(warn)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Error3(format string, a ...interface{}) {
+	if print3 < 0 {
 		return
 	}
 	prefix := red(erro)
