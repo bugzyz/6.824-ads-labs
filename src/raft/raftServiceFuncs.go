@@ -80,7 +80,7 @@ func (rf *Raft) candidatesLogIsUp2Date(argsTerm int, argsIndex int) bool {
 }
 
 func (rf *Raft) DoSnapshot(index int, ssData []byte) {
-	// rf.mu.Lock()
+	rf.mu.Lock()
 	//debug
 	Trace2("starting raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.logs)
 	//some if block to avoid the incorrect status of raft
@@ -99,5 +99,5 @@ func (rf *Raft) DoSnapshot(index int, ssData []byte) {
 
 	//debug
 	Trace2("finished raft-%v doSnapshot() info:\n snapshotIndex:%v\t snapshotTerm:%v\n rf.logs:%v", rf.me, rf.snapshotIndex, rf.snapshotTerm, rf.logs)
-	// rf.mu.Unlock()
+	rf.mu.Unlock()
 }

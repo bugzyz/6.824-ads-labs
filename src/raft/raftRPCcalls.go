@@ -59,6 +59,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if equal than only needs to replicate the succeeding logEntries
 		if unequal than needs more logEntires to replicate
 	*/
+	Trace4("out of index: args.prevlogindex:%v,rf.snapshotIndex:%v len:%v", args.PrevLogIndex, rf.snapshotIndex, len(rf.logs))
+
 	if args.PrevLogIndex > 0 && rf.logs[args.PrevLogIndex-rf.snapshotIndex].Term != args.PrevLogTerm {
 		//needs more logEntires to replicate
 		//in this case the X == 2
@@ -124,15 +126,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 //for server commit its logs
 func (rf *Raft) commitLogs() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 		//the commandValid most be true otherwise the applyCh will ignore this applyMsg
 		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i-rf.snapshotIndex].Command}
 	}
 
+	rf.mu.Lock()
 	rf.lastApplied = rf.commitIndex
+	rf.mu.Unlock()
 }
 
 //detect whether there is a conflict between follower's logs and leader's logs
