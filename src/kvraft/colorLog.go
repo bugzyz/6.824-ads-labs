@@ -12,7 +12,7 @@ const print = -1
 const print1 = -1
 
 //third group
-const print2 = -1
+const print2 = 1
 
 const (
 	color_red = uint8(iota + 91)

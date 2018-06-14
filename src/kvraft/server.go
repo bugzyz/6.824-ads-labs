@@ -78,7 +78,7 @@ func (kv *KVServer) callStart(op Op) bool {
 	kv.mu.Unlock()
 	select {
 	case cmd := <-ch:
-		Trace("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
+		Trace2("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
 		return cmd == op
 	case <-time.After(800 * time.Millisecond):
 		return false
@@ -138,7 +138,7 @@ func (kv *KVServer) executeOpOnKvServer(op Op) {
 	default:
 		Error("kvServer-%v executeOpOnKvServer func went wrong", kv.me)
 	}
-	Trace1("KvServer-%v now has the storage of %v", kv.me, kv.storage)
+	Trace2("KvServer-%v now has the storage of %v", kv.me, kv.storage)
 }
 
 //this func is a for loop that make that kv-server keeps receiving new committed op from the associated raft agreement
@@ -295,6 +295,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.readSnapshot(persister.ReadSnapshot())
 	Info2("a new kvServer reading snapshot from persister:%v", persister.ReadSnapshot())
 
+	Trace2("after recoverying from the snapshot the kvserver-%v now has the storage:%v", kv.me, kv.storage)
 	go kv.receiveApplyMsgAndApply()
 	return kv
 }

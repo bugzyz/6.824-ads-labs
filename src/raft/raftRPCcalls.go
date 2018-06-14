@@ -61,6 +61,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	*/
 	Trace4("out of index: args.prevlogindex:%v,rf.snapshotIndex:%v len:%v", args.PrevLogIndex, rf.snapshotIndex, len(rf.logs))
 
+	if rf.snapshotIndex > args.PrevLogIndex {
+		reply.NextTryIndex = rf.getLastLogIndex() + 1
+		return
+	}
+
 	if args.PrevLogIndex > 0 && rf.logs[args.PrevLogIndex-rf.snapshotIndex].Term != args.PrevLogTerm {
 		//needs more logEntires to replicate
 		//in this case the X == 2
@@ -73,7 +78,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		//args.PrevLogTerm ==
 		//args.PrevLogIndex == 2
 		//term == 1
-		term := rf.logs[args.PrevLogIndex].Term
+		term := rf.logs[args.PrevLogIndex-rf.snapshotIndex].Term
 
 		//to repeatly find out the prevous term logs and tell the leaders for asking more args.entries to modified its own uncommitted log
 		for reply.NextTryIndex = args.PrevLogIndex - 1; reply.NextTryIndex-rf.snapshotIndex > 0 && rf.logs[reply.NextTryIndex-rf.snapshotIndex].Term == term; reply.NextTryIndex-- {
