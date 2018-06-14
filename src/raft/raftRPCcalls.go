@@ -259,7 +259,7 @@ func (rf *Raft) sendAllAppendEntries() {
 				args.LastIncludedTerm = rf.snapshotTerm
 
 				reply := new(InstallSsReply)
-				reply.Term = -1
+				// reply.Term = -1
 				go rf.sendInstallSnapshotRequest(i, args, reply)
 			}
 		}
