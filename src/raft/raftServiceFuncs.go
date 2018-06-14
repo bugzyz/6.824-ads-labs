@@ -90,7 +90,7 @@ func (rf *Raft) DoSnapshot(index int, ssData []byte) {
 	//update the index being snapshotted
 	rf.snapshotIndex = index
 	rf.snapshotTerm = rf.logs[0].Term
-
+	rf.lastApplied = index
 	//persist() will generate the saveRaftState() to store raft's state
 	rf.persist()
 

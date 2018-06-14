@@ -59,7 +59,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if equal than only needs to replicate the succeeding logEntries
 		if unequal than needs more logEntires to replicate
 	*/
-	Trace4("out of index: args.prevlogindex:%v,rf.snapshotIndex:%v len:%v", args.PrevLogIndex, rf.snapshotIndex, len(rf.logs))
+	Trace4("rf-%v out of index: args.prevlogindex:%v,rf.snapshotIndex:%v len:%v", rf.me, args.PrevLogIndex, rf.snapshotIndex, len(rf.logs))
 
 	if rf.snapshotIndex > args.PrevLogIndex {
 		reply.NextTryIndex = rf.getLastLogIndex() + 1
@@ -131,10 +131,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 //for server commit its logs
 func (rf *Raft) commitLogs() {
-
-	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+	rf.mu.Lock()
+	logs := rf.logs
+	snapshotIndex := rf.snapshotIndex
+	commitIndex := rf.commitIndex
+	rf.mu.Unlock()
+	for i := rf.lastApplied + 1; i <= commitIndex; i++ {
+		Trace4("commitLogs: lastAppllied+1:%v snapshotIndex:%v", i, rf.snapshotIndex)
 		//the commandValid most be true otherwise the applyCh will ignore this applyMsg
-		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: rf.logs[i-rf.snapshotIndex].Command}
+		rf.applyCh <- ApplyMsg{CommandValid: true, CommandIndex: i, Command: logs[i-snapshotIndex].Command}
 	}
 
 	rf.mu.Lock()

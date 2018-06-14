@@ -147,9 +147,7 @@ func (kv *KVServer) executeOpOnKvServer(op Op) {
 	default:
 		Error("kvServer-%v executeOpOnKvServer func went wrong", kv.me)
 	}
-	if kv.me == 0 {
-		Trace2("KvServer-%v now has the storage of %v", kv.me, kv.storage)
-	}
+	Trace2("KvServer-%v now has the storage of %v", kv.me, kv.storage)
 }
 
 //this func is a for loop that make that kv-server keeps receiving new committed op from the associated raft agreement
@@ -170,6 +168,7 @@ func (kv *KVServer) receiveApplyMsgAndApply() {
 			if kv.maxIndex < msg.CommandIndex {
 				kv.maxIndex = msg.CommandIndex
 			}
+			kv.snapshotServer(msg.CommandIndex)
 			kv.mu.Unlock()
 			continue
 		}
