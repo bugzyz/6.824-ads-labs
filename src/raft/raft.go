@@ -42,6 +42,11 @@ type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
+
+	//lab3B
+	//used for the lab3B snapshot mechanism
+	UseSnapshot bool
+	Snapshot    []byte
 }
 
 //
@@ -77,6 +82,10 @@ type Raft struct {
 	//a channel for telling the folower waiting that it receives a eletion and vote
 	granted   chan bool
 	heartbeat chan bool
+
+	//lab3B
+	snapshotIndex int
+	snapshotTerm  int
 }
 
 // return currentTerm and whether this server
@@ -326,4 +335,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	go rf.runServer()
 	return rf
+}
+
+//return the raft persister size
+func (rf *Raft) GetRaftSize() int {
+	return rf.persister.RaftStateSize()
 }

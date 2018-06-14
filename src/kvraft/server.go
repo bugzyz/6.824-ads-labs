@@ -1,6 +1,7 @@
 package raftkv
 
 import (
+	"bytes"
 	"labgob"
 	"labrpc"
 	"log"
@@ -48,6 +49,13 @@ type KVServer struct {
 	//use the clientId as the key, and the opNum as the value
 	//As the opNum of a specific clientId is monotonically increasing, it will be easy to detect the duplicate request from the same clientId
 	detectDup map[int64]int
+
+	//lab3B
+	//record the max index for snapshotting and as a offset to update the raft log entries after deleting the previous log entries
+	maxIndex      int
+	snapshotIndex int
+
+	snapshotData []byte
 }
 
 func (kv *KVServer) callStart(op Op) bool {
@@ -70,7 +78,9 @@ func (kv *KVServer) callStart(op Op) bool {
 	kv.mu.Unlock()
 	select {
 	case cmd := <-ch:
-		Trace("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
+		if kv.me == 0 {
+			Trace2("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
+		}
 		return cmd == op
 	case <-time.After(800 * time.Millisecond):
 		return false
@@ -122,15 +132,22 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 
 //after receiving a committed operation than apply it on the kv.storage
 func (kv *KVServer) executeOpOnKvServer(op Op) {
+	Trace2("executed on kv-%v with op:%v", kv.me, op)
 	switch op.Type {
 	case "Put":
 		kv.storage[op.Key] = op.Value
+		if kv.me == 0 {
+			Trace2("kv-%v put op-key:%v,op-value:%v", kv.me, op.Key, op.Value)
+		}
 	case "Append":
 		kv.storage[op.Key] += op.Value
+		if kv.me == 0 {
+			Trace2("kv-%v append op-key:%v,op-value:%v", kv.me, op.Key, op.Value)
+		}
 	default:
 		Error("kvServer-%v executeOpOnKvServer func went wrong", kv.me)
 	}
-	Trace1("KvServer-%v now has the storage of %v", kv.me, kv.storage)
+	Trace2("KvServer-%v now has the storage of %v", kv.me, kv.storage)
 }
 
 //this func is a for loop that make that kv-server keeps receiving new committed op from the associated raft agreement
@@ -139,13 +156,24 @@ func (kv *KVServer) receiveApplyMsgAndApply() {
 	for {
 		//get the op that commit by those rafts
 		msg := <-kv.applyCh
-		//convert the command interface{} to Op
-		op := msg.Command.(Op)
-
-		//debug
-		Error("kv-%v receiving a msg:%v", kv.me, msg)
 
 		kv.mu.Lock()
+
+		if msg.UseSnapshot {
+			//debug
+			Error1("kv-%v receiving a snapshot msg:%v", kv.me, msg.Snapshot)
+			//apply the snapshot on the kv-server
+			kv.readSnapshot(msg.Snapshot)
+			//apply the snapshot and update its maxIndex
+			if kv.maxIndex < msg.CommandIndex {
+				kv.maxIndex = msg.CommandIndex
+			}
+			kv.snapshotServer(msg.CommandIndex)
+			kv.mu.Unlock()
+			continue
+		}
+		//convert the command interface{} to Op
+		op := msg.Command.(Op)
 
 		if op.Type != "GET" {
 			//record the opNum of every clientId so that if the op.Opnum <= opNum, it means that this operation is executed before
@@ -163,8 +191,75 @@ func (kv *KVServer) receiveApplyMsgAndApply() {
 			ch <- op
 			// Error("kv-%v sending a op:%v to ch", kv.me, op)
 		}
+
+		//record the max index for snapshotting and as a offset to update the raft log entries after deleting the previous log entries
+		if msg.CommandIndex > kv.maxIndex {
+			kv.maxIndex = msg.CommandIndex
+		}
+
+		//lab3B
+		//if exceed the maxraftstate, do the snapshot
+		if kv.maxraftstate != -1 && kv.rf.GetRaftSize() >= kv.maxraftstate {
+			kv.snapshotServer(kv.maxIndex)
+		}
 		kv.mu.Unlock()
 	}
+}
+
+//apply the snapshot to the server based on the snapshot data from raft
+func (kv *KVServer) readSnapshot(data []byte) {
+	if data == nil || len(data) < 1 {
+		return
+	}
+
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	newStorage := make(map[string]string)
+	newDetectDup := make(map[int64]int)
+	var newSnapshotIndex int
+	if kv.me == 0 {
+		Trace2("kv-%v now initiating and reading a snapshot", kv.me)
+	}
+
+	// if d.Decode(&newStorage) == nil && d.Decode(&newDetectDup) == nil && d.Decode(&kv.snapshotIndex) == nil {
+	// 	kv.storage = newStorage
+	// 	kv.detectDup = newDetectDup
+	// 	Info2("kv-%v successfully read a snapshot", kv.me)
+	// }
+	ok1 := d.Decode(&newStorage) != nil
+	ok2 := d.Decode(&newDetectDup) != nil
+	ok3 := d.Decode(&newSnapshotIndex) != nil
+	ok := ok1 || ok2 || ok3
+	if ok {
+		Error2("----THE ReadPersist Func Went Wrong!!----store:%v, detect:%v, ssIndex:%v", ok1, ok2, ok3)
+
+	} else {
+		kv.storage = newStorage
+		kv.detectDup = newDetectDup
+		kv.snapshotIndex = newSnapshotIndex
+		if kv.me == 0 {
+			Info2("----THE kv-%v ReadPersist Func Went GREAT!!----", kv.me)
+			Trace2("with newStorage:%v", kv.storage)
+		}
+	}
+}
+
+//snapshot the current server state and pass it to raft
+func (kv *KVServer) snapshotServer(index int) {
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+
+	//update the snapshot index in kvserver
+	//kv.snapshotIndex = index
+
+	e.Encode(kv.storage)
+	e.Encode(kv.detectDup)
+	e.Encode(kv.snapshotIndex)
+
+	//pass the snapshot data to raft and the snapshotIndex
+	kv.rf.DoSnapshot(index, w.Bytes())
+	Info2("kv-%v create a snapshot a pass it to raft", kv.me)
+
 }
 
 //
@@ -204,12 +299,20 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	// You may need initialization code here.
 
 	kv.applyCh = make(chan raft.ApplyMsg)
-	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
 	kv.storage = make(map[string]string)
 	kv.result = make(map[int]chan Op)
 	kv.detectDup = make(map[int64]int)
+
+	//todo: i should recover the state of rf first
+	kv.readSnapshot(persister.ReadSnapshot())
+	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+
+	if kv.me == 0 {
+		Info2("a new kvServer reading snapshot from persister")
+		Trace2("after recoverying from the snapshot the kvserver-%v now has the storage:%v", kv.me, kv.storage)
+	}
 
 	go kv.receiveApplyMsgAndApply()
 	return kv
