@@ -78,7 +78,9 @@ func (kv *KVServer) callStart(op Op) bool {
 	kv.mu.Unlock()
 	select {
 	case cmd := <-ch:
-		Trace2("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
+		if kv.me == 0 {
+			Trace2("kv-%v receiving a cmd-%v and the cmd==op is %v", kv.me, cmd, cmd == op)
+		}
 		return cmd == op
 	case <-time.After(800 * time.Millisecond):
 		return false
@@ -130,15 +132,24 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 
 //after receiving a committed operation than apply it on the kv.storage
 func (kv *KVServer) executeOpOnKvServer(op Op) {
+	Trace2("executed on kv-%v with op:%v", kv.me, op)
 	switch op.Type {
 	case "Put":
 		kv.storage[op.Key] = op.Value
+		if kv.me == 0 {
+			Trace2("kv-%v put op-key:%v,op-value:%v", kv.me, op.Key, op.Value)
+		}
 	case "Append":
 		kv.storage[op.Key] += op.Value
+		if kv.me == 0 {
+			Trace2("kv-%v append op-key:%v,op-value:%v", kv.me, op.Key, op.Value)
+		}
 	default:
 		Error("kvServer-%v executeOpOnKvServer func went wrong", kv.me)
 	}
-	Trace2("KvServer-%v now has the storage of %v", kv.me, kv.storage)
+	if kv.me == 0 {
+		Trace2("KvServer-%v now has the storage of %v", kv.me, kv.storage)
+	}
 }
 
 //this func is a for loop that make that kv-server keeps receiving new committed op from the associated raft agreement
@@ -207,7 +218,9 @@ func (kv *KVServer) readSnapshot(data []byte) {
 	newStorage := make(map[string]string)
 	newDetectDup := make(map[int64]int)
 	var newSnapshotIndex int
-	Trace2("kv-%v now initiating and reading a snapshot", kv.me)
+	if kv.me == 0 {
+		Trace2("kv-%v now initiating and reading a snapshot", kv.me)
+	}
 
 	// if d.Decode(&newStorage) == nil && d.Decode(&newDetectDup) == nil && d.Decode(&kv.snapshotIndex) == nil {
 	// 	kv.storage = newStorage
@@ -225,7 +238,10 @@ func (kv *KVServer) readSnapshot(data []byte) {
 		kv.storage = newStorage
 		kv.detectDup = newDetectDup
 		kv.snapshotIndex = newSnapshotIndex
-		Info2("----THE ReadPersist Func Went GREAT!!----")
+		if kv.me == 0 {
+			Info2("----THE kv-%v ReadPersist Func Went GREAT!!----", kv.me)
+			Trace2("with newStorage:%v", kv.storage)
+		}
 	}
 }
 
@@ -284,7 +300,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	// You may need initialization code here.
 
 	kv.applyCh = make(chan raft.ApplyMsg)
-	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
 	kv.storage = make(map[string]string)
@@ -293,9 +308,13 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	//todo: i should recover the state of rf first
 	kv.readSnapshot(persister.ReadSnapshot())
-	Info2("a new kvServer reading snapshot from persister:%v", persister.ReadSnapshot())
+	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
-	Trace2("after recoverying from the snapshot the kvserver-%v now has the storage:%v", kv.me, kv.storage)
+	if kv.me == 0 {
+		Info2("a new kvServer reading snapshot from persister")
+		Trace2("after recoverying from the snapshot the kvserver-%v now has the storage:%v", kv.me, kv.storage)
+	}
+
 	go kv.receiveApplyMsgAndApply()
 	return kv
 }
