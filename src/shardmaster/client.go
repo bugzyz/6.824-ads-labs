@@ -12,6 +12,11 @@ import "math/big"
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// Your data here.
+	leader int
+	//client id
+	ClientId int64
+	//operation num: to ignore duplicate operation return from different raft(leader)
+	opNum int
 }
 
 func nrand() int64 {
@@ -25,6 +30,10 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// Your code here.
+	ck.leader = 0
+	ck.ClientId = nrand()
+	ck.opNum = 0
+
 	return ck
 }
 
