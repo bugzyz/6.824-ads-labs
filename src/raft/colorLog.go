@@ -18,7 +18,7 @@ const print2 = -1
 const print3 = -1
 
 //fifth group
-const print4 = 1
+const print4 = -1
 
 const (
 	color_red = uint8(iota + 91)
