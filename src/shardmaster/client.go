@@ -40,10 +40,10 @@ func (ck *Clerk) Query(num int) Config {
 	args := &QueryArgs{}
 	// Your code here.
 	args.Num = num
-	info := &ClientInfo{}
+	info := ClientInfo{}
 	info.ClientId = ck.ClientId
 	info.OpNum = ck.opNum
-	args.info = info
+	args.Info = info
 	for {
 		// try each known server.
 		for _, srv := range ck.servers {
@@ -62,10 +62,10 @@ func (ck *Clerk) Join(servers map[int][]string) {
 	args := &JoinArgs{}
 	// Your code here.
 	args.Servers = servers
-	info := &ClientInfo{}
+	info := ClientInfo{}
 	info.ClientId = ck.ClientId
 	info.OpNum = ck.opNum
-	args.info = info
+	args.Info = info
 	for {
 		// try each known server.
 		for _, srv := range ck.servers {
@@ -84,10 +84,10 @@ func (ck *Clerk) Leave(gids []int) {
 	args := &LeaveArgs{}
 	// Your code here.
 	args.GIDs = gids
-	info := &ClientInfo{}
+	info := ClientInfo{}
 	info.ClientId = ck.ClientId
 	info.OpNum = ck.opNum
-	args.info = info
+	args.Info = info
 	for {
 		// try each known server.
 		for _, srv := range ck.servers {
@@ -107,10 +107,10 @@ func (ck *Clerk) Move(shard int, gid int) {
 	// Your code here.
 	args.Shard = shard
 	args.GID = gid
-	info := &ClientInfo{}
+	info := ClientInfo{}
 	info.ClientId = ck.ClientId
 	info.OpNum = ck.opNum
-	args.info = info
+	args.Info = info
 	for {
 		// try each known server.
 		for _, srv := range ck.servers {

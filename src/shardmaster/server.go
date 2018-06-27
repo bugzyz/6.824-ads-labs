@@ -100,7 +100,7 @@ func (sm *ShardMaster) getConfig(index int, config *Config) {
 
 func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
 	// Your code here.
-	op := Op{Type: "join", ClientId: args.info.ClientId, OpNum: args.info.OpNum, Servers: args.Servers}
+	op := Op{Type: "join", ClientId: args.Info.ClientId, OpNum: args.Info.OpNum, Servers: args.Servers}
 
 	//call raft to replicate
 	ok := sm.callStart(op)
@@ -118,7 +118,7 @@ func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
 
 func (sm *ShardMaster) Leave(args *LeaveArgs, reply *LeaveReply) {
 	// Your code here.
-	op := Op{Type: "leave", ClientId: args.info.ClientId, OpNum: args.info.OpNum, GIDs: args.GIDs}
+	op := Op{Type: "leave", ClientId: args.Info.ClientId, OpNum: args.Info.OpNum, GIDs: args.GIDs}
 
 	//call raft to replicate
 	ok := sm.callStart(op)
@@ -135,7 +135,7 @@ func (sm *ShardMaster) Leave(args *LeaveArgs, reply *LeaveReply) {
 
 func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
 	// Your code here.
-	op := Op{Type: "move", ClientId: args.info.ClientId, OpNum: args.info.OpNum, Shard: args.Shard, GID: args.GID}
+	op := Op{Type: "move", ClientId: args.Info.ClientId, OpNum: args.Info.OpNum, Shard: args.Shard, GID: args.GID}
 
 	//call raft to replicate
 	ok := sm.callStart(op)
@@ -152,7 +152,7 @@ func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
 
 func (sm *ShardMaster) Query(args *QueryArgs, reply *QueryReply) {
 	// Your code here.
-	op := Op{Type: "move", ClientId: args.info.ClientId, OpNum: args.info.OpNum, Num: args.Num}
+	op := Op{Type: "move", ClientId: args.Info.ClientId, OpNum: args.Info.OpNum, Num: args.Num}
 
 	//call raft to replicate
 	ok := sm.callStart(op)
@@ -223,6 +223,8 @@ func (sm *ShardMaster) execJoin(groups map[int][]string) {
 	config := Config{}
 	//get the up-2-date config info
 	sm.getConfig(-1, &config)
+	//add the index num of the current config
+	config.Num++
 	for k, v := range groups {
 		var servers = make([]string, len(v))
 		copy(servers, v)
@@ -231,6 +233,44 @@ func (sm *ShardMaster) execJoin(groups map[int][]string) {
 
 	//step2. rebalance
 	sm.rebalance(&config)
+	//step3.append new config to sm.configs
+	sm.configs = append(sm.configs, config)
+
+}
+
+//execute the Leave operation on shardmaster
+func (sm *ShardMaster) execLeave(GIDs []int) {
+	//step1. construct a new config{}
+	config := Config{}
+	//get the up-2-date config info
+	sm.getConfig(-1, &config)
+	//add the index num of the current config
+	config.Num++
+
+	//for loop deletes the key==GIDs[i] in config.Groups
+	for _, key := range GIDs {
+		delete(config.Groups, key)
+	}
+
+	//step2. rebalance
+	sm.rebalance(&config)
+	//step3.append new config to sm.configs
+	sm.configs = append(sm.configs, config)
+
+}
+
+//execute the Move operation on shardmaster
+func (sm *ShardMaster) execMove(shardNum int, GID int) {
+	//step1. construct a new config{}
+	config := Config{}
+	//get the up-2-date config info
+	sm.getConfig(-1, &config)
+	//add the index num of the current config
+	config.Num++
+
+	config.Shards[shardNum] = GID
+
+	//stepNo there is not a rebalance in move
 	//step3.append new config to sm.configs
 	sm.configs = append(sm.configs, config)
 
@@ -246,11 +286,12 @@ func (sm *ShardMaster) receiveApplyMsgAndApply() {
 		//if opNum is not a duplicate opNum then execute it
 		if opNum, ok := sm.detectDup[op.ClientId]; !ok || op.OpNum > opNum {
 			switch op.Type {
-			//todo: do something based on the op sm receive
 			case "join":
 				sm.execJoin(op.Servers)
 			case "move":
+				sm.execMove(op.Shard, op.GID)
 			case "leave":
+				sm.execLeave(op.GIDs)
 			case "query":
 			}
 			sm.detectDup[op.ClientId] = op.OpNum
