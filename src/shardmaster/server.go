@@ -31,14 +31,18 @@ type Op struct {
 	//operation type: join,leave,move,query
 	Type string
 
-	//void *
-	interface{} configInfo
-
 	//the id of which the request comes from
 	ClientId int64
 
 	//the num of the request which used to detect duplicate request return from different raft
 	OpNum int
+
+	//args
+	Servers map[int][]string // args of "Join"
+	GIDs    []int            // args of "Leave"
+	Shard   int              // args of "Move"
+	GID     int              // args of "Move"
+	Num     int              // args of "Query" desired config number
 }
 
 //when the new operation(join,leave...) arrives, use the callStart to start a raft replicating
@@ -62,18 +66,41 @@ func (master *ShardMaster) callStart(op Op) bool {
 	master.mu.Unlock()
 	select {
 	case cmd := <-ch:
-		if master.me == 0 {
-			Trace("master-%v receiving a cmd-%v and the cmd==op is %v", master.me, cmd, cmd == op)
-		}
-		return cmd == op
+		return compareEqual(cmd, op)
 	case <-time.After(800 * time.Millisecond):
 		return false
 	}
 }
 
+//to compare between 2 Op, check their clientId and opNum
+func compareEqual(op1 Op, op2 Op) bool {
+	if op1.ClientId == op2.ClientId && op1.OpNum == op2.OpNum {
+		return true
+	}
+	return false
+}
+
+// should only be called when holding the lock
+//if index == -1 or greater than the len of configs --> return the greatest config
+//otherwise, return the exact config
+func (sm *ShardMaster) getConfig(index int, config *Config) {
+	if index == -1 || index >= len(sm.configs) {
+		index = len(sm.configs) - 1
+	}
+	config.Num = sm.configs[index].Num
+	config.Shards = sm.configs[index].Shards
+	config.Groups = make(map[int][]string)
+	//copy the configs[index].Group which is a map<string,string[]> to config
+	for k, v := range sm.configs[index].Groups {
+		var servers = make([]string, len(v))
+		copy(servers, v)
+		config.Groups[k] = servers
+	}
+}
+
 func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
 	// Your code here.
-	op := Op{Type: "join"}
+	op := Op{Type: "join", ClientId: args.info.ClientId, OpNum: args.info.OpNum, Servers: args.Servers}
 
 	//call raft to replicate
 	ok := sm.callStart(op)
@@ -81,26 +108,66 @@ func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
 	// callStart() failed the leader is changed and return the wrongleader reply
 	if !ok {
 		reply.WrongLeader = true
+		reply.Err = ""
 		return
 	}
 	reply.WrongLeader = false
-	sm.mu.Lock()
-
-	newConfig := Config{}
-	sm.configs = Append(sm.configs, s)
+	reply.Err = OK
 
 }
 
 func (sm *ShardMaster) Leave(args *LeaveArgs, reply *LeaveReply) {
 	// Your code here.
+	op := Op{Type: "leave", ClientId: args.info.ClientId, OpNum: args.info.OpNum, GIDs: args.GIDs}
+
+	//call raft to replicate
+	ok := sm.callStart(op)
+
+	// callStart() failed the leader is changed and return the wrongleader reply
+	if !ok {
+		reply.WrongLeader = true
+		reply.Err = ""
+		return
+	}
+	reply.WrongLeader = false
+	reply.Err = OK
 }
 
 func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
 	// Your code here.
+	op := Op{Type: "move", ClientId: args.info.ClientId, OpNum: args.info.OpNum, Shard: args.Shard, GID: args.GID}
+
+	//call raft to replicate
+	ok := sm.callStart(op)
+
+	// callStart() failed the leader is changed and return the wrongleader reply
+	if !ok {
+		reply.WrongLeader = true
+		reply.Err = ""
+		return
+	}
+	reply.WrongLeader = false
+	reply.Err = OK
 }
 
 func (sm *ShardMaster) Query(args *QueryArgs, reply *QueryReply) {
 	// Your code here.
+	op := Op{Type: "move", ClientId: args.info.ClientId, OpNum: args.info.OpNum, Num: args.Num}
+
+	//call raft to replicate
+	ok := sm.callStart(op)
+
+	// callStart() failed the leader is changed and return the wrongleader reply
+	if !ok {
+		reply.WrongLeader = true
+		reply.Err = ""
+		return
+	}
+	reply.WrongLeader = false
+	reply.Err = OK
+	sm.mu.Lock()
+	sm.getConfig(args.Num, &reply.Config)
+	sm.mu.Unlock()
 }
 
 //
@@ -145,6 +212,30 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	return sm
 }
 
+//todo:
+func (sm *ShardMaster) rebalance(newConfig *Config) {
+
+}
+
+//execute the Join operation on shardmaster
+func (sm *ShardMaster) execJoin(groups map[int][]string) {
+	//step1. construct a new config{}
+	config := Config{}
+	//get the up-2-date config info
+	sm.getConfig(-1, &config)
+	for k, v := range groups {
+		var servers = make([]string, len(v))
+		copy(servers, v)
+		config.Groups[k] = servers
+	}
+
+	//step2. rebalance
+	sm.rebalance(&config)
+	//step3.append new config to sm.configs
+	sm.configs = append(sm.configs, config)
+
+}
+
 func (sm *ShardMaster) receiveApplyMsgAndApply() {
 	for {
 		//receive the command(join,leave...) from raft cluster
@@ -157,6 +248,7 @@ func (sm *ShardMaster) receiveApplyMsgAndApply() {
 			switch op.Type {
 			//todo: do something based on the op sm receive
 			case "join":
+				sm.execJoin(op.Servers)
 			case "move":
 			case "leave":
 			case "query":
