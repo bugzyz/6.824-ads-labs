@@ -1,4 +1,4 @@
-package raft
+package shardkv
 
 import (
 	"fmt"
@@ -14,12 +14,6 @@ const print1 = -1
 //third group
 const print2 = -1
 
-//fourth group
-const print3 = -1
-
-//fifth group
-const print4 = -1
-
 const (
 	color_red = uint8(iota + 91)
 	color_green
@@ -27,11 +21,11 @@ const (
 	color_blue
 	color_magenta //洋红
 
-	info = "[INFO-raft]"
-	trac = "[TRAC-raft]"
-	erro = "[ERRO-raft]"
-	warn = "[WARN-raft]"
-	succ = "[SUCC-raft]"
+	info = "[INFO-shardkv]"
+	trac = "[TRAC-shardkv]"
+	erro = "[ERRO-shardkv]"
+	warn = "[WARN-shardkv]"
+	succ = "[SUCC-shardkv]"
 )
 
 // see complete color rules in document in https://en.wikipedia.org/wiki/ANSI_escape_code#cite_note-ecma48-13
@@ -173,85 +167,6 @@ func Warning2(format string, a ...interface{}) {
 
 func Error2(format string, a ...interface{}) {
 	if print2 < 0 {
-		return
-	}
-	prefix := red(erro)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Trace3(format string, a ...interface{}) {
-	if print3 < 0 {
-		return
-	}
-	prefix := yellow(trac)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Info3(format string, a ...interface{}) {
-	if print3 < 0 {
-		return
-	}
-	prefix := blue(info)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Success3(format string, a ...interface{}) {
-	if print3 < 0 {
-		return
-	}
-	prefix := green(succ)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Warning3(format string, a ...interface{}) {
-	if print3 < 0 {
-		return
-	}
-	prefix := magenta(warn)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Error3(format string, a ...interface{}) {
-	if print3 < 0 {
-		return
-	}
-	prefix := red(erro)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-func Trace4(format string, a ...interface{}) {
-	if print4 < 0 {
-		return
-	}
-	prefix := yellow(trac)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Info4(format string, a ...interface{}) {
-	if print4 < 0 {
-		return
-	}
-	prefix := blue(info)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Success4(format string, a ...interface{}) {
-	if print4 < 0 {
-		return
-	}
-	prefix := green(succ)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Warning4(format string, a ...interface{}) {
-	if print4 < 0 {
-		return
-	}
-	prefix := magenta(warn)
-	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
-}
-
-func Error4(format string, a ...interface{}) {
-	if print4 < 0 {
 		return
 	}
 	prefix := red(erro)
