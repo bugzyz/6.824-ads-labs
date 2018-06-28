@@ -2,10 +2,10 @@
    
 the 6.824 labs  
 This is my answer of 6.824  
-As a greenhand of the ads-lab, I also read the code from 
-https://github.com/WenbinZhu/MIT-6.824-labs  
-https://github.com/xingdl2007/6.824-2017
-The code from Wenbinzhu,xingdl2007 is clear and easy to understand.
+As a greenhand of the ads-lab, I also read the code from     
+https://github.com/WenbinZhu/MIT-6.824-labs      
+https://github.com/xingdl2007/6.824-2017    
+The code from Wenbinzhu,xingdl2007 is clear and easy to understand.    
 I added some comments in my version so that it would be easy to understand how the implementation works.    
 
 Course website: https://pdos.csail.mit.edu/6.824/schedule.html  
