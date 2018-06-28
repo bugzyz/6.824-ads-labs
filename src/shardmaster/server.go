@@ -53,7 +53,6 @@ func (master *ShardMaster) callStart(op Op) bool {
 	if isLeader == false {
 		return false
 	}
-	Success("master-%v now connect the true leader", master.me)
 	master.mu.Lock()
 	ch, ok := master.result[index]
 
@@ -152,7 +151,7 @@ func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
 
 func (sm *ShardMaster) Query(args *QueryArgs, reply *QueryReply) {
 	// Your code here.
-	op := Op{Type: "move", ClientId: args.Info.ClientId, OpNum: args.Info.OpNum, Num: args.Num}
+	op := Op{Type: "query", ClientId: args.Info.ClientId, OpNum: args.Info.OpNum, Num: args.Num}
 
 	//call raft to replicate
 	ok := sm.callStart(op)
@@ -212,8 +211,20 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	return sm
 }
 
-//todo:
-func (sm *ShardMaster) rebalance(newConfig *Config) {
+func (sm *ShardMaster) rebalance(cnfg *Config) {
+
+	if len(cnfg.Groups) == 0 {
+		return
+	}
+
+	groupFamily := make([]int, 0)
+	for gid, _ := range cnfg.Groups {
+		groupFamily = append(groupFamily, gid)
+	}
+
+	for i, _ := range cnfg.Shards {
+		cnfg.Shards[i] = groupFamily[i%len(groupFamily)]
+	}
 
 }
 
