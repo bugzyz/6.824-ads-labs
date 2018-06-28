@@ -2,7 +2,7 @@
    
 the 6.824 labs  
 This is my answer of 6.824  
-As a greenhand of the ads-lab, i also read the code from https://github.com/WenbinZhu/MIT-6.824-labs     
+As a greenhand of the ads-lab, I also read the code from https://github.com/WenbinZhu/MIT-6.824-labs     
 The code from Wenbinzhu is clear and easy to understand.
 I added some comments in my version so that it would be easy to understand how the implementation works.    
 
@@ -33,5 +33,5 @@ And the dev branch is a branch maintaining the latest progress which follows the
 - [x] ----Lab 3-part3B
 
 - [ ] Lab 4: Sharded Key/Value Service
-- [ ] ----Lab 4-part4A
+- [x] ----Lab 4-part4A
 - [ ] ----Lab 4-part4B
