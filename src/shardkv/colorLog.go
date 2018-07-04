@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-//decide whether to prinbt
-const print = -1
+//get\putAppend log
+const print = 1
 
-//second group
-const print1 = -1
+//Migrateion/configuration/cleanup log
+const print1 = 1
 
-//third group
-const print2 = -1
+//snapshot log
+const print2 = 1
 
 const (
 	color_red = uint8(iota + 91)

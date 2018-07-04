@@ -11,15 +11,6 @@ import (
 	"time"
 )
 
-const Debug = 0
-
-func DPrintf(format string, a ...interface{}) (n int, err error) {
-	if Debug > 0 {
-		log.Printf(format, a...)
-	}
-	return
-}
-
 type DataBase map[string]string
 type Duplicate map[int64]*LatestReply
 
@@ -92,7 +83,7 @@ type Item struct {
 
 func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 	defer func() {
-		DPrintf("[%d-%d]: Get args: %v, reply: %v. (shard: %d)\n", kv.gid, kv.me, args, reply, key2shard(args.Key))
+		Trace("[%d-%d]: Get args: %v, reply: %v. (shard: %d)\n", kv.gid, kv.me, args, reply, key2shard(args.Key))
 	}()
 
 	// Your code here.
@@ -122,7 +113,7 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 			if shard == item.Shard {
 				kv.mu.Unlock()
 				reply.Err = ErrWrongGroup
-				DPrintf("[%d-%d]: Get rpc: postpone client request, still waiting data.\n", kv.gid, kv.me)
+				Error("[%d-%d]: Get rpc: postpone client request, still waiting data.\n", kv.gid, kv.me)
 				return
 			}
 		}
@@ -136,7 +127,7 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 			reply.WrongLeader = false
 			reply.Err = OK
 			reply.Value = dup.Reply.Value
-			DPrintf("[%d-%d]: Get rpc: duplicate request: %d - %d.\n", kv.gid, kv.me, args.SeqNo, dup.Seq)
+			Trace("[%d-%d]: Get rpc: duplicate request: %d - %d.\n", kv.gid, kv.me, args.SeqNo, dup.Seq)
 			return
 		}
 	}
@@ -180,7 +171,7 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 
 func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	defer func() {
-		DPrintf("[%d-%d]: PutAppend args: %v, reply: %v. (shard: %d)\n", kv.gid, kv.me, args, reply,
+		Trace("[%d-%d]: PutAppend args: %v, reply: %v. (shard: %d)\n", kv.gid, kv.me, args, reply,
 			key2shard(args.Key))
 	}()
 
@@ -212,7 +203,7 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			if shard == item.Shard {
 				kv.mu.Unlock()
 				// postpone client
-				DPrintf("[%d-%d]: PutAppend rpc: postpone client request, still waiting data.\n", kv.gid, kv.me)
+				Error("[%d-%d]: PutAppend rpc: postpone client request, still waiting data.\n", kv.gid, kv.me)
 				reply.Err = ErrWrongGroup
 				return
 			}
@@ -225,7 +216,7 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			kv.mu.Unlock()
 			reply.WrongLeader = false
 			reply.Err = OK
-			DPrintf("[%d-%d]: PutAppend rpc: duplicate request: %d - %d.\n", kv.gid, kv.me, args.SeqNo, dup.Seq)
+			Trace("[%d-%d]: PutAppend rpc: duplicate request: %d - %d.\n", kv.gid, kv.me, args.SeqNo, dup.Seq)
 			return
 		}
 	}
@@ -259,7 +250,7 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 // Migrate Configuration
 func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 	defer func() {
-		DPrintf("[%d-%d]: request Migrate, args: %v, reply: %t, %q, db: %v.\n", kv.gid, kv.me, args,
+		Trace1("[%d-%d]: request Migrate, args: %v, reply: %t, %q, db: %v.\n", kv.gid, kv.me, args,
 			reply.WrongLeader, reply.Err, reply.Data)
 	}()
 
@@ -291,7 +282,7 @@ func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 // GC RPC: called by other group to notify cleaning up unnecessary Shards
 func (kv *ShardKV) CleanUp(args *CleanUpArgs, reply *CleanUpReply) {
 	defer func() {
-		DPrintf("[%d-%d]: request CleanUp, args: %v, reply: %v.\n", kv.gid, kv.me, args, reply)
+		Info1("[%d-%d]: request CleanUp, args: %v, reply: %v.\n", kv.gid, kv.me, args, reply)
 	}()
 
 	// not leader?
@@ -322,7 +313,7 @@ func (kv *ShardKV) CleanUp(args *CleanUpArgs, reply *CleanUpReply) {
 // should be called when holding the lock
 func (kv *ShardKV) applyMigratedData(mig Mig) {
 	defer func() {
-		DPrintf("[%d-%d]: kv.workList: %v\n", kv.gid, kv.me, kv.workList)
+		Trace1("[%d-%d]: kv.workList: %v\n", kv.gid, kv.me, kv.workList)
 	}()
 
 	// update data
@@ -382,7 +373,7 @@ func (kv *ShardKV) shardGC(args CleanUp) {
 			delete(kv.db, k)
 		}
 	}
-	DPrintf("[%d-%d]: server %d has gc shard: %d @ config: %d, from gid: %d\n",
+	Success1("[%d-%d]: server %d has gc shard: %d @ config: %d, from gid: %d\n",
 		kv.gid, kv.me, kv.me, args.Shard, args.Num, args.Gid)
 }
 
@@ -423,7 +414,7 @@ func (kv *ShardKV) applyDaemon() {
 						// switch to new config already?
 						shard := key2shard(cmd.Key)
 						if kv.configs[0].Shards[shard] != kv.gid {
-							DPrintf("[%d-%d]: server %d (gid: %d) has switched to new config %d, "+
+							Success1("[%d-%d]: server %d (gid: %d) has switched to new config %d, "+
 								"no responsibility for shard %d\n",
 								kv.gid, kv.me, kv.me, kv.gid, kv.configs[0].Num, shard)
 							err = ErrWrongGroup
@@ -441,7 +432,7 @@ func (kv *ShardKV) applyDaemon() {
 								kv.db[cmd.Key] += cmd.Value
 								kv.duplicate[cmd.ClientID] = &LatestReply{Seq: cmd.SeqNo}
 							default:
-								DPrintf("[%d-%d]: server %d receive invalid cmd: %v\n", kv.gid, kv.me, kv.me, cmd)
+								Error1("[%d-%d]: server %d receive invalid cmd: %v\n", kv.gid, kv.me, kv.me, cmd)
 								panic("invalid command operation")
 							}
 						}
@@ -464,7 +455,7 @@ func (kv *ShardKV) applyDaemon() {
 								kv.gcHistory[cmd.Shard] = kv.configs[0].Num
 							}
 						} else {
-							DPrintf("[%d-%d]: server %d, shard: %d, config: %d - %d, gc history: %d\n",
+							Success1("[%d-%d]: server %d, shard: %d, config: %d - %d, gc history: %d\n",
 								kv.gid, kv.me, kv.me, cmd.Shard, cmd.Num, kv.configs[0].Num, kv.gcHistory[cmd.Shard])
 						}
 					default:
@@ -485,7 +476,7 @@ func (kv *ShardKV) applyDaemon() {
 				}
 			}
 		case <-kv.shutdownCh:
-			DPrintf("[%d-%d]: server %d is shutting down.\n", kv.gid, kv.me, kv.me)
+			Error("[%d-%d]: server %d is shutting down.\n", kv.gid, kv.me, kv.me)
 			return
 		}
 	}
@@ -524,7 +515,7 @@ func (kv *ShardKV) generateSnapshot(index int) {
 	data := w.Bytes()
 	kv.persist.SaveSnapshot(data)
 
-	DPrintf("[%d-%d]: server %d generate snapshot (configs: %v, worklist: %v).\n",
+	Success2("[%d-%d]: server %d generate snapshot (configs: %v, worklist: %v).\n",
 		kv.gid, kv.me, kv.me, kv.configs, kv.workList)
 }
 
@@ -545,7 +536,7 @@ func (kv *ShardKV) readSnapshot(data []byte) {
 	d.Decode(&kv.workList)
 	d.Decode(&kv.gcHistory)
 
-	DPrintf("[%d-%d]: server %d read snapshot (configs: %v, worklist: %v).\n",
+	Trace2("[%d-%d]: server %d read snapshot (configs: %v, worklist: %v).\n",
 		kv.gid, kv.me, kv.me, kv.configs, kv.workList)
 
 	// if snapshot occurs in middle of migration
@@ -560,7 +551,7 @@ func (kv *ShardKV) switchConfig(new *shardmaster.Config) {
 	var old = &kv.configs[0]
 	kv.generateWorkList(old, new)
 
-	DPrintf("[%d-%d]: server %d switch to new config (%d->%d, shards: %v, workList: %v, configs: %v).\n",
+	Trace1("[%d-%d]: server %d switch to new config (%d->%d, shards: %v, workList: %v, configs: %v).\n",
 		kv.gid, kv.me, kv.me, kv.configs[0].Num, new.Num, new.Shards, kv.workList[new.Num], len(kv.configs))
 
 	if len(kv.configs) > 2 {
@@ -631,7 +622,7 @@ func (kv *ShardKV) requestShards(old *shardmaster.Config, num int) {
 			var mig = Mig{Num: reply.Num, Shard: reply.Shard, Gid: reply.Gid, Data: reply.Data, Dup: reply.Dup}
 			kv.rf.Start(mig)
 
-			DPrintf("[%d-%d]: leader %d receive shard: %d, from: %d).\n", kv.gid, kv.me, kv.me,
+			Success1("[%d-%d]: leader %d receive shard: %d, from: %d).\n", kv.gid, kv.me, kv.me,
 				reply.Shard, reply.Gid)
 		}
 	}
@@ -677,7 +668,7 @@ func (kv *ShardKV) requestCleanUp(shard, gid int, config *shardmaster.Config) {
 		Gid:   kv.gid,
 	}
 
-	DPrintf("[%d-%d]: leader %d issue cleanup shard: %d, gid: %d).\n", kv.gid, kv.me, kv.me, shard, gid)
+	Info1("[%d-%d]: leader %d issue cleanup shard: %d, gid: %d).\n", kv.gid, kv.me, kv.me, shard, gid)
 
 	for {
 		// shutdown?
@@ -757,7 +748,7 @@ func (kv *ShardKV) restartMigration() {
 			kv.mu.Unlock()
 
 			if cur != now {
-				DPrintf("done....\n")
+				Success1("done....\n")
 				return
 			}
 
@@ -766,7 +757,7 @@ func (kv *ShardKV) restartMigration() {
 			}
 
 			time.Sleep(100 * time.Millisecond)
-			DPrintf("[%d-%d]: restartMigration: config: %d, work: %v\n", kv.gid, kv.me, now, work.RecFrom)
+			Success1("[%d-%d]: restartMigration: config: %d, work: %v\n", kv.gid, kv.me, now, work.RecFrom)
 		}
 	}
 }
@@ -796,7 +787,7 @@ func (kv *ShardKV) getNextConfig() {
 				// need waiting? just try, if failed, another leader will reply
 				if _, isLeader := kv.rf.GetState(); isLeader && kv.isMigrateDone("getNextConfig()") {
 					kv.rf.Start(Cfg{Config: kv.configs[1]})
-					DPrintf("[%d-%d]: leader %d detect new config (%d->%d).\n", kv.gid, kv.me, kv.me,
+					Success1("[%d-%d]: leader %d detect new config (%d->%d).\n", kv.gid, kv.me, kv.me,
 						kv.configs[0].Num, kv.configs[1].Num)
 				}
 			}
@@ -810,7 +801,7 @@ func (kv *ShardKV) getNextConfig() {
 func (kv *ShardKV) isMigrateDone(pos string) bool {
 	_, ok := kv.workList[kv.configs[0].Num]
 	defer func() {
-		DPrintf("[%d-%d]: %s: Is migrate to %d Done? %t\n",
+		Success1("[%d-%d]: %s: Is migrate to %d Done? %t\n",
 			kv.gid, kv.me, pos, kv.configs[0].Num, !ok)
 	}()
 	return !ok
@@ -884,6 +875,6 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	go kv.applyDaemon()   // get log entry from raft layer
 	go kv.getNextConfig() // query shard master for configuration
 
-	DPrintf("StartServer: %d-%d\n", kv.gid, kv.me)
+	Success("StartServer: %d-%d\n", kv.gid, kv.me)
 	return kv
 }
