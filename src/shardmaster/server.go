@@ -206,6 +206,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	sm.detectDup = make(map[int64]int)
 	sm.result = make(map[int]chan Op)
 
+	Trace2("shardmaster-%v have peers:%v", sm.me, servers)
 	go sm.receiveApplyMsgAndApply()
 
 	return sm

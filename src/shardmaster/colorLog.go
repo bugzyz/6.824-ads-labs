@@ -12,7 +12,7 @@ const print = -1
 //second group
 const print1 = -1
 
-//third group
+//for checking whether the shardmaster have a group of raft
 const print2 = -1
 
 const (

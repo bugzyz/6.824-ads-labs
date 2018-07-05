@@ -818,6 +818,7 @@ func (rf *Raft) canvassVotes() {
 			if reply.VoteGranted {
 				if votes == peers/2 {
 					rf.status = Leader
+					Info5("have a new leader-rf-%v, have peers:%v", rf.me, rf.peers)
 					rf.resetOnElection()    // reset leader state
 					go rf.heartbeatDaemon() // new leader, start heartbeat daemon
 					DPrintf("[%d-%s]: peer %d become new leader.\n", rf.me, rf, rf.me)
@@ -938,4 +939,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	DPrintf("[%d-%s]: newborn election(%s) heartbeat(%s) term(%d) voted(%d)\n",
 		rf.me, rf, rf.electionTimeout, rf.heartbeatInterval, rf.CurrentTerm, rf.VotedFor)
 	return rf
+}
+
+func (rf *Raft) GetMe() int {
+	return rf.me
 }

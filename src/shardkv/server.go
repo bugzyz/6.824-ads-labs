@@ -87,16 +87,15 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 	}()
 
 	// Your code here.
-	// not leader ?
+	// if the kv's raft no more the leader then return
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.WrongLeader = true
 		reply.Err = ""
 		return
 	}
 
-	//DPrintf("[%d-%d]: leader %d receive rpc: Get(%q).\n", kv.gid, kv.me, kv.me, args.Key)
 	shard := key2shard(args.Key)
-	// not responsible for key?
+	// the key is not responsible for this kv
 	kv.mu.Lock()
 	if kv.configs[0].Shards[shard] != kv.gid {
 		kv.mu.Unlock()
@@ -105,6 +104,7 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 	}
 
 	// if responsible, check whether already receive data from previous owner
+	// if the worklist have a non-empty recFrom which means the migratin work incompleted. So let the client try next time even though the key2shard pointing to this kv server
 	cur := kv.configs[0].Num
 	if work, ok := kv.workList[cur]; ok {
 		recFrom := work.RecFrom
@@ -120,6 +120,7 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 	}
 
 	// duplicate put/append request
+	// if the request is duplicate then return the reply been replied before
 	if dup, ok := kv.duplicate[args.ClientID]; ok {
 		// filter duplicate
 		if args.SeqNo <= dup.Seq {
@@ -176,15 +177,13 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	}()
 
 	// Your code here.
-	// not leader ?
+	// not the leader now
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.WrongLeader = true
 		reply.Err = ""
 		return
 	}
 
-	//DPrintf("[%d-%d]: leader %d receive rpc: PutAppend(%q => (%q,%q), (%d-%d).\n", kv.gid, kv.me, kv.me,
-	//	args.Op, args.Key, args.Value, args.ClientID, args.SeqNo)
 	shard := key2shard(args.Key)
 	// not responsible for key?
 	kv.mu.Lock()
@@ -255,6 +254,7 @@ func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 	}()
 
 	// not leader?
+	// every servers in the same group have their own raft group and the servers in the same group have the same data which will be delivered by the leader
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.WrongLeader = true
 		reply.Err = ""
@@ -270,6 +270,8 @@ func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 		reply.Err = ""
 		return
 	}
+
+	//packing its data to the shardkv who connects the raft leader of its group and asks for the data migration
 	reply.Data, reply.Dup = kv.copyDataDup(args.Shard)
 
 	reply.WrongLeader = false
@@ -277,6 +279,7 @@ func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 	reply.Shard = args.Shard
 	reply.Num = args.Num
 	reply.Gid = kv.gid
+
 }
 
 // GC RPC: called by other group to notify cleaning up unnecessary Shards
@@ -449,6 +452,7 @@ func (kv *ShardKV) applyDaemon() {
 					case CleanUp:
 						if kv.gcHistory[cmd.Shard] < cmd.Num && cmd.Num <= kv.configs[0].Num {
 							if kv.configs[0].Shards[cmd.Shard] != kv.gid {
+								Error3("migration done...executing cleanup")
 								kv.shardGC(cmd)
 								kv.gcHistory[cmd.Shard] = cmd.Num
 							} else {
@@ -520,7 +524,7 @@ func (kv *ShardKV) generateSnapshot(index int) {
 }
 
 func (kv *ShardKV) readSnapshot(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
+	if data == nil || len(data) < 1 {
 		return
 	}
 	r := bytes.NewBuffer(data)
@@ -649,6 +653,7 @@ func (kv *ShardKV) requestShards(old *shardmaster.Config, num int) {
 						var reply MigrateReply
 						ok := srv.Call("ShardKV.Migrate", args, &reply)
 						if ok && reply.WrongLeader == false && reply.Err == OK {
+							Success3("successfully call 1 migrate server:%v in shard:%v gid:%v now", si, s, g)
 							replyHandler(&reply)
 							return
 						}

@@ -6,13 +6,16 @@ import (
 )
 
 //get\putAppend log
-const print = 1
+const print = -1
 
 //Migrateion/configuration/cleanup log
-const print1 = 1
+const print1 = -1
 
 //snapshot log
-const print2 = 1
+const print2 = -1
+
+//check the usage of the checking isLeader in func: Migration
+const print3 = -1
 
 const (
 	color_red = uint8(iota + 91)
@@ -167,6 +170,48 @@ func Warning2(format string, a ...interface{}) {
 
 func Error2(format string, a ...interface{}) {
 	if print2 < 0 {
+		return
+	}
+	prefix := red(erro)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+// --------------------------------------------
+
+func Trace3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := yellow(trac)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Info3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := blue(info)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Success3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := green(succ)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Warning3(format string, a ...interface{}) {
+	if print3 < 0 {
+		return
+	}
+	prefix := magenta(warn)
+	fmt.Println(formatLog(prefix), fmt.Sprintf(format, a...))
+}
+
+func Error3(format string, a ...interface{}) {
+	if print3 < 0 {
 		return
 	}
 	prefix := red(erro)
