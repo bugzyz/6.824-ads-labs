@@ -36,9 +36,9 @@ And the dev branch is a branch maintaining the latest progress which follows the
 
 - [ ] Lab 4: Sharded Key/Value Service
 - [x] ----Lab 4-part4A
-- [ ] ----Lab 4-part4B
-   Lab4B is quite difficult for me, and here are some logical diagrams refered to https://github.com/xingdl2007/6.824-2017 implementation of shardkv.     
--------------------------     
+- [ ] ----Lab 4-part4B    
+   --------Lab4B is quite difficult for me, and here are some logical diagrams refered to https://github.com/xingdl2007/6.824-2017 implementation of shardkv.        
+       
 How the shard\group\server combine together:     
 ![combination](https://github.com/bugzyz/6.824-ads-labs/raw/dev/readmePic/IMG_5343.jpg)     
 Configure -> Migration:     
