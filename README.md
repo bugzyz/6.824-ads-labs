@@ -41,7 +41,9 @@ And the dev branch is a branch maintaining the latest progress which follows the
        
 How the shard\group\server combine together:     
 ![combination](https://github.com/bugzyz/6.824-ads-labs/raw/dev/readmePic/IMG_5343.jpg)     
+        
 Configure -> Migration:     
 ![Configure -> Migration](https://github.com/bugzyz/6.824-ads-labs/raw/dev/readmePic/IMG_5344.jpg)      
+        
 shardkv applyDaemon():     
 ![shardkv applyDaemon()](https://github.com/bugzyz/6.824-ads-labs/raw/dev/readmePic/IMG_5342.jpg)  
